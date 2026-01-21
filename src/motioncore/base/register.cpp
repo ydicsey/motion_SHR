@@ -136,7 +136,8 @@ void Register::Reset() {
   evaluated_gates_online_ = 0;
   gates_setup_done_flag_ = false;
   gates_online_done_flag_ = false;
-  
+  gates_online_ = 0;
+  gates_setup_ = 0;
   
 }
 
