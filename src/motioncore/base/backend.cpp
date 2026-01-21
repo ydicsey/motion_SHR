@@ -183,7 +183,10 @@ const GatePointer& Backend::GetGate(std::size_t gate_id) const {
   return register_->GetGate(gate_id);
 }
 
-void Backend::Reset() { register_->Reset(); }
+void Backend::Reset() { 
+  register_->Reset();
+  base_ot_provider_->Reset();
+}
 
 void Backend::Clear() { register_->Clear(); }
 

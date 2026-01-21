@@ -74,6 +74,19 @@ struct BaseOtData {
     sender_data.Add(number_of_ots);
   }
 
+  // Resets the Base OT data
+  void Reset() {
+    total_number_ots = 0;
+    receiver_data.ResetOnlineIsReady();
+    sender_data.ResetOnlineIsReady();
+    receiver_data.messages_c.clear();
+    receiver_data.c.Clear();
+    sender_data.messages_0.clear();
+    sender_data.messages_1.clear();
+    receiver_futures.clear();
+    sender_futures.clear();
+  }
+
   BaseOtReceiverData receiver_data;
   BaseOtSenderData sender_data;
 

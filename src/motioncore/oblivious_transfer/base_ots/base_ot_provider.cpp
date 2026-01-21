@@ -47,6 +47,15 @@ BaseOtProvider::BaseOtProvider(communication::CommunicationLayer& communication_
   number_of_ots_.resize(number_of_parties_ - 1, 0);
 }
 
+void BaseOtProvider::Reset(){
+  std::cout<<"Resetting BaseOtProvider + clear number_of_ots_"<<std::endl;
+  std::fill(number_of_ots_.begin(), number_of_ots_.end(), 0);
+  for (auto& base_ot_data : data_) {
+    std::cout<<"Resetting BaseOtData for party"<<std::endl;
+    base_ot_data.Reset();
+  }
+}
+
 BaseOtProvider::~BaseOtProvider() {}
 
 void BaseOtProvider::PreSetup() {
@@ -82,6 +91,7 @@ std::vector<std::size_t> BaseOtProvider::Request(std::size_t number_of_ots) {
     }
     std::size_t remapped_party_id{party_id > my_id_ ? party_id - 1 : party_id};
     number_of_ots_.at(remapped_party_id) += number_of_ots;
+    std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
     offsets.at(party_id) = data_.at(party_id).total_number_ots;
     data_.at(party_id).Add(number_of_ots);
   }
@@ -92,6 +102,7 @@ std::size_t BaseOtProvider::Request(std::size_t number_of_ots, std::size_t party
   assert(party_id < number_of_parties_);
   std::size_t remapped_party_id{party_id > my_id_ ? party_id - 1 : party_id};
   number_of_ots_.at(remapped_party_id) += number_of_ots;
+std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
   auto offset = data_.at(party_id).total_number_ots;
   data_.at(party_id).Add(number_of_ots);
   return offset;

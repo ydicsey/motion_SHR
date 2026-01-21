@@ -69,6 +69,7 @@ class BaseOtProvider : public FiberOnlineWaitable {
   const BaseOtData& GetBaseOtsData(std::size_t party_id) const { return data_.at(party_id); }
   void PreSetup();
   bool HasWork();
+  void Reset();
 
   /// \brief Add the number of Base OTs for each party. Must be called before PreSetup()
   std::vector<std::size_t> Request(std::size_t number_of_ots);
