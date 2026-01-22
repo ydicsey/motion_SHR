@@ -28,6 +28,7 @@
 #include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
+#include <boost/accumulators/statistics/sum.hpp>
 #include <boost/json.hpp>
 #include <list>
 #include "run_time_statistics.h"
@@ -48,7 +49,7 @@ class AccumulatedRunTimeStatistics {
   using AccumulatorType = boost::accumulators::accumulator_set<
       double,
       boost::accumulators::stats<boost::accumulators::tag::mean, boost::accumulators::tag::median,
-                                 boost::accumulators::tag::lazy_variance>>;
+                                 boost::accumulators::tag::sum, boost::accumulators::tag::lazy_variance>>;
 
   void Add(const RunTimeStatistics& statistics);
 

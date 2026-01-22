@@ -62,6 +62,7 @@ static std::string FormatLine(std::string name, std::string unit,
   ss << fmt::format("{:19s} ", name);
   ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::mean(accumulator), field_width, unit);
   ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::median(accumulator), field_width, unit);
+  ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::sum(accumulator), field_width, unit);
   // uncorrected standard deviation
   ss << fmt::format("{:{}.3f} {:s}", std::sqrt(boost::accumulators::variance(accumulator)),
                     field_width, unit);
@@ -76,8 +77,8 @@ std::string AccumulatedRunTimeStatistics::PrintHumanReadable() const {
 
   ss << fmt::format("Run time statistics over {} iterations\n", count_)
      << "---------------------------------------------------------------------------\n"
-     << fmt::format("                    {:>{}s}    {:>{}s}    {:>{}s}\n", "mean", kFieldWidth,
-                    "median", kFieldWidth, "stddev", kFieldWidth)
+     << fmt::format("                    {:>{}s}    {:>{}s}    {:>{}s}    {:>{}s}\n", "mean", kFieldWidth,
+                    "median", kFieldWidth,"sum", kFieldWidth, "stddev", kFieldWidth)
      << "---------------------------------------------------------------------------\n"
      << FormatLine("MT Presetup", unit, At(accumulators_, StatId::kMtPresetup), kFieldWidth)
      << FormatLine("MT Setup", unit, At(accumulators_, StatId::kMtSetup), kFieldWidth)
@@ -106,6 +107,7 @@ boost::json::object AccumulatedRunTimeStatistics::ToJson() const {
     const auto& acc = At(accumulators_, stat_id);
     return boost::json::object({{"mean", boost::accumulators::mean(acc)},
                                 {"median", boost::accumulators::median(acc)},
+                                {"sum", boost::accumulators::sum(acc)},
                                 // uncorrected standard deviation
                                 {"stddev", std::sqrt(boost::accumulators::variance(acc))}});
   };
