@@ -24,6 +24,7 @@
 
 #include "pseudo_random_generator.h"
 
+#include <iostream>
 #include <cstdint>
 
 #include "aes/aesni_primitives.h"
@@ -50,6 +51,8 @@ std::vector<std::byte> Prg::Encrypt(const std::size_t bytes) {
   const std::size_t byte_length = number_of_blocks * AES_BLOCK_SIZE;
   int length = static_cast<int>(bytes);
 
+  std::cout << "Prg::Encrypt: bytes = " << bytes << ", number_of_blocks = " << number_of_blocks
+            << ", byte_length = " << byte_length << ", length = " << length << "\n";
   // Asserting that conversion of (possibly larger) unsigned to signed integral value is safe here.
   assert(length > 0 && "assigning bytes to int should yield a positive value");
   assert(static_cast<std::size_t>(length) == bytes &&
