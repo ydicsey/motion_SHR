@@ -343,6 +343,11 @@ void OtProviderFromOtExtension::PreSetup() {
   }
 }
 
+void OtProviderFromOtExtension::Reset() {
+  sender_provider_.Reset();
+  receiver_provider_.Reset();
+}
+
 OtVector::OtVector(const std::size_t ot_id, const std::size_t number_of_ots,
                    const std::size_t bitlength, OtExtensionData& data)
     : ot_id_(ot_id), number_of_ots_(number_of_ots), bitlength_(bitlength), data_(data) {}
@@ -651,6 +656,13 @@ bool OtProviderManager::HasWork() {
     }
   }
   return false;
+}
+
+void OtProviderManager::Reset() {
+  std::cout << "OtProviderManager::Reset: " << providers_.size() << std::endl;
+  for (auto& provider : providers_) {
+    if (provider) provider->Reset();
+  }
 }
 
 }  // namespace encrypto::motion

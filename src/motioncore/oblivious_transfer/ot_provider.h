@@ -271,7 +271,11 @@ class OtProvider : public FiberSetupWaitable {
 
   virtual void Clear() { throw std::runtime_error("not implemented"); }
 
-  virtual void Reset() { throw std::runtime_error("not implemented"); }
+  // virtual void Reset() { 
+  //   std::cout<< "OtProvider::Reset" << std::endl;
+  //   throw std::runtime_error("not implemented"); 
+  // }
+  virtual void Reset() = 0;
 
  protected:
   OtProvider() = default;
@@ -342,6 +346,8 @@ class OtProviderFromOtExtension final : public OtProvider {
 
   void PreSetup() final;
 
+  void Reset() final;
+
   OtProviderFromOtExtension(OtExtensionData& data, BaseOtProvider& base_ot_provider, BaseProvider&,
                             std::size_t party_id);
 
@@ -388,6 +394,8 @@ class OtProviderManager {
   OtProvider& GetProvider(std::size_t party_id) { return *providers_.at(party_id); }
 
   bool HasWork();
+
+  void Reset();
 
  private:
   communication::CommunicationLayer& communication_layer_;
