@@ -51,6 +51,8 @@ class SbProvider {
  public:
   bool NeedSbs() const noexcept;
 
+  virtual void Reset() = 0;
+
   template <typename T>
   std::size_t GetNumberOfSbs() const noexcept {
     if constexpr (std::is_same_v<T, std::uint8_t>) {
@@ -161,6 +163,8 @@ class SbProviderFromSps final : public SbProvider {
 
   // needs completed SPs
   void Setup() final override;
+
+  void Reset() final override;
 
  private:
   void RegisterSps();

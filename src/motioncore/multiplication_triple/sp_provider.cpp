@@ -75,6 +75,34 @@ void SpProviderFromOts::PreSetup() {
   }
 }
 
+void SpProviderFromOts::Reset() {
+  // 清除請求計數
+  number_of_sps_8_ = 0;
+  number_of_sps_16_ = 0;
+  number_of_sps_32_ = 0;
+  number_of_sps_64_ = 0;
+
+  // 清除已產生的 SP
+  sps_8_.a.clear();  sps_8_.c.clear();
+  sps_16_.a.clear(); sps_16_.c.clear();
+  sps_32_.a.clear(); sps_32_.c.clear();
+  sps_64_.a.clear(); sps_64_.c.clear();
+
+  // 釋放已註冊的 OTs
+  for (auto& v : ots_receiver_8_)  v.clear();
+  for (auto& v : ots_sender_8_)    v.clear();
+  for (auto& v : ots_receiver_16_) v.clear();
+  for (auto& v : ots_sender_16_)   v.clear();
+  for (auto& v : ots_receiver_32_) v.clear();
+  for (auto& v : ots_sender_32_)   v.clear();
+  for (auto& v : ots_receiver_64_) v.clear();
+  for (auto& v : ots_sender_64_)   v.clear();
+
+  finished_ = false;
+  // finished_condition_ = std::make_shared<FiberCondition>([this]() { return finished_.load(); });
+  finished_condition_ = std::make_shared<FiberCondition>([this]() { return finished_; });
+}
+
 void SpProviderFromOts::Setup() {
   if (!NeedSps()) {
     return;

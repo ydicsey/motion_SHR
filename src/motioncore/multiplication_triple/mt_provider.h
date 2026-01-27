@@ -49,6 +49,9 @@ class MtProvider {
  public:
   virtual ~MtProvider() = default;
 
+  // Reset function to clear previously requested MTS
+  virtual void Reset() =0;
+
   bool NeedMts() const noexcept;
 
   template <typename T>
@@ -175,6 +178,8 @@ class MtProviderFromOts final : public MtProvider {
   ~MtProviderFromOts();
 
   void PreSetup() final override;
+
+  void Reset() final override;
 
   // needs completed OTExtension
   void Setup() final override;

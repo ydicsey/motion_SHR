@@ -101,6 +101,40 @@ void MtProviderFromOts::PreSetup() {
   }
 }
 
+void MtProviderFromOts::Reset() {
+  // reset requested counts
+  number_of_bit_mts_ = 0;
+  number_of_mts_8_ = 0;
+  number_of_mts_16_ = 0;
+  number_of_mts_32_ = 0;
+  number_of_mts_64_ = 0;
+
+  // clear generated triples
+  bit_mts_.a.Clear();
+  bit_mts_.b.Clear();
+  bit_mts_.c.Clear();
+  mts8_.a.clear();  mts8_.b.clear();  mts8_.c.clear();
+  mts16_.a.clear(); mts16_.b.clear(); mts16_.c.clear();
+  mts32_.a.clear(); mts32_.b.clear(); mts32_.c.clear();
+  mts64_.a.clear(); mts64_.b.clear(); mts64_.c.clear();
+
+  // drop registered OTs
+  for (auto& l : ots_receiver_8_)  l.clear();
+  for (auto& l : ots_sender_8_)    l.clear();
+  for (auto& l : ots_receiver_16_) l.clear();
+  for (auto& l : ots_sender_16_)   l.clear();
+  for (auto& l : ots_receiver_32_) l.clear();
+  for (auto& l : ots_sender_32_)   l.clear();
+  for (auto& l : ots_receiver_64_) l.clear();
+  for (auto& l : ots_sender_64_)   l.clear();
+  for (auto& p : bit_ots_receiver_) p.reset();
+  for (auto& p : bit_ots_sender_)   p.reset();
+
+  // reset ready flag/condition
+  finished_.store(false);
+  finished_condition_ = std::make_shared<FiberCondition>([this]() { return finished_.load(); });
+}
+
 // needs completed OTExtension
 void MtProviderFromOts::Setup() {
   if (!NeedMts()) {

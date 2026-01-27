@@ -266,6 +266,8 @@ class Kk13OtProviderManager {
 
   bool HasWork();
 
+  void Reset();
+
   void PreSetup() {
     for (auto& provider : providers_) {
       if (provider) provider->PreSetup();

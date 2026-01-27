@@ -625,4 +625,10 @@ bool Kk13OtProviderManager::HasWork() {
   return false;
 }
 
+void Kk13OtProviderManager::Reset() {
+  for (auto& provider : providers_) {
+    if (provider) provider->Reset();
+  }
+}
+
 }  // namespace encrypto::motion

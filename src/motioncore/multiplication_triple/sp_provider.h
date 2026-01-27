@@ -55,6 +55,8 @@ class SpProvider {
 
   bool NeedSps() const noexcept;
 
+  virtual void Reset() = 0;
+
   template <typename T>
   std::size_t GetNumberOfSps() const noexcept {
     if constexpr (std::is_same_v<T, std::uint8_t>) {
@@ -177,6 +179,8 @@ class SpProviderFromOts final : public SpProvider {
 
   // needs completed OTExtension
   void Setup() final override;
+
+  void Reset() final override;
 
  private:
   void RegisterOts();

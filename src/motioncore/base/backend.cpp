@@ -188,6 +188,10 @@ void Backend::Reset() {
   base_ot_provider_->Reset();
   // sence Reset function is not implemented
   ot_provider_manager_->Reset();
+  kk13_ot_provider_manager_->Reset();
+  mt_provider_->Reset();
+  sp_provider_->Reset();
+  sb_provider_->Reset();
 }
 
 void Backend::Clear() { register_->Clear(); }

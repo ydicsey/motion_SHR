@@ -60,6 +60,22 @@ SbProviderFromSps::SbProviderFromSps(communication::CommunicationLayer& communic
 
 SbProviderFromSps::~SbProviderFromSps() {}
 
+void SbProviderFromSps::Reset() {
+  sp_provider_->Reset();
+
+  number_of_sbs_8_ = 0;
+  number_of_sbs_16_ = 0;
+  number_of_sbs_32_ = 0;
+  number_of_sbs_64_ = 0;
+  sbs_8_.clear();
+  sbs_16_.clear();
+  sbs_32_.clear();
+  sbs_64_.clear();
+
+  finished_ = false;
+  finished_condition_ = std::make_shared<FiberCondition>([this]() { return finished_; });
+}
+
 void SbProviderFromSps::PreSetup() {
   if (!NeedSbs()) {
     return;
