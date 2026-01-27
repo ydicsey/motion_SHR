@@ -48,10 +48,10 @@ BaseOtProvider::BaseOtProvider(communication::CommunicationLayer& communication_
 }
 
 void BaseOtProvider::Reset(){
-  std::cout<<"Resetting BaseOtProvider + clear number_of_ots_"<<std::endl;
+  // std::cout<<"Resetting BaseOtProvider + clear number_of_ots_"<<std::endl;
   std::fill(number_of_ots_.begin(), number_of_ots_.end(), 0);
   for (auto& base_ot_data : data_) {
-    std::cout<<"Resetting BaseOtData for party"<<std::endl;
+    // std::cout<<"Resetting BaseOtData for party"<<std::endl;
     base_ot_data.Reset();
   }
 }

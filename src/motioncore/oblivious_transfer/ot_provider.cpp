@@ -346,6 +346,8 @@ void OtProviderFromOtExtension::PreSetup() {
 void OtProviderFromOtExtension::Reset() {
   sender_provider_.Reset();
   receiver_provider_.Reset();
+  ResetSetupIsReady();
+  // ResetOnlineIsReady();
 }
 
 OtVector::OtVector(const std::size_t ot_id, const std::size_t number_of_ots,
@@ -659,7 +661,7 @@ bool OtProviderManager::HasWork() {
 }
 
 void OtProviderManager::Reset() {
-  std::cout << "OtProviderManager::Reset: " << providers_.size() << std::endl;
+  // std::cout << "OtProviderManager::Reset: " << providers_.size() << std::endl;
   for (auto& provider : providers_) {
     if (provider) provider->Reset();
   }
