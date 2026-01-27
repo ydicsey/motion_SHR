@@ -91,7 +91,7 @@ std::vector<std::size_t> BaseOtProvider::Request(std::size_t number_of_ots) {
     }
     std::size_t remapped_party_id{party_id > my_id_ ? party_id - 1 : party_id};
     number_of_ots_.at(remapped_party_id) += number_of_ots;
-    std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
+    // std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
     offsets.at(party_id) = data_.at(party_id).total_number_ots;
     data_.at(party_id).Add(number_of_ots);
   }
@@ -102,7 +102,7 @@ std::size_t BaseOtProvider::Request(std::size_t number_of_ots, std::size_t party
   assert(party_id < number_of_parties_);
   std::size_t remapped_party_id{party_id > my_id_ ? party_id - 1 : party_id};
   number_of_ots_.at(remapped_party_id) += number_of_ots;
-std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
+  // std::cout<<"Requesting " << number_of_ots << " " << number_of_ots_.at(remapped_party_id) << " OTs for party "<< party_id <<std::endl;
   auto offset = data_.at(party_id).total_number_ots;
   data_.at(party_id).Add(number_of_ots);
   return offset;
