@@ -755,7 +755,7 @@ void BitVector<Allocator>::Copy(const std::size_t dest_from, const BitVector& ot
 template <typename Allocator>
 BitVector<Allocator> BitVector<Allocator>::Subset(std::size_t from, std::size_t to) const {
   if (from > bit_size_ || to > bit_size_) {
-    throw std::out_of_range(fmt::format("Accessing positions {} to {} of {}", from, to, bit_size_));
+    throw std::out_of_range(fmt::format("Subset:758::Accessing positions {} to {} of {}", from, to, bit_size_));
   }
 
   if (to - from == bit_size_) return *this;
@@ -1415,7 +1415,7 @@ template <typename BitVectorType>
 BitVectorType BitSpan::Subset(const std::size_t from, const std::size_t to) const {
   if (from > to || to > bit_size_) {
     throw std::out_of_range(
-        fmt::format("Accessing positions {} to {} in BitSpan of bit_size {}", from, to, bit_size_));
+        fmt::format("subset:1418::Accessing positions {} to {} in BitSpan of bit_size {}", from, to, bit_size_));
   }
   return SubsetImplementation<typename BitVectorType::allocator>(from, to, this->pointer_);
 }

@@ -346,6 +346,14 @@ void OtProviderFromOtExtension::PreSetup() {
 void OtProviderFromOtExtension::Reset() {
   sender_provider_.Reset();
   receiver_provider_.Reset();
+  data_.sender_data.y0.clear();
+  data_.sender_data.y1.clear();
+  data_.sender_data.bitlengths.clear();
+  data_.receiver_data.outputs.clear();
+  data_.receiver_data.bitlengths.clear();
+  if (data_.receiver_data.random_choices) {
+    data_.receiver_data.random_choices->Clear();
+  }
   ResetSetupIsReady();
   // ResetOnlineIsReady();
 }

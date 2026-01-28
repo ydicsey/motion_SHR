@@ -46,6 +46,20 @@ BaseProvider::BaseProvider(communication::CommunicationLayer& communication_laye
 
 BaseProvider::~BaseProvider() {}
 
+void BaseProvider::Reset() {
+  for (auto& gen : my_randomness_generators_) {
+    if (gen) gen->ResetBitPool();
+  }
+  for (auto& gen : their_randomness_generators_) {
+    if (gen) gen->ResetBitPool();
+  }
+  if (global_randomness_generator_) {
+    global_randomness_generator_->ResetBitPool();
+  }
+  ResetSetupIsReady();
+  // ResetOnlineIsReady();
+}
+
 void BaseProvider::Setup() {
   if constexpr (kDebug) {
     if (logger_) {

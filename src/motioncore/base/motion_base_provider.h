@@ -52,6 +52,8 @@ class BaseProvider : public FiberSetupWaitable {
   ~BaseProvider();
 
   void Setup();
+  
+  void Reset();
 
   const std::vector<std::uint8_t>& GetAesFixedKey() const { return aes_fixed_key_; }
   primitives::SharingRandomnessGenerator& GetMyRandomnessGenerator(std::size_t party_id) {

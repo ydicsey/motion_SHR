@@ -184,14 +184,15 @@ const GatePointer& Backend::GetGate(std::size_t gate_id) const {
 }
 
 void Backend::Reset() { 
-  register_->Reset();
   base_ot_provider_->Reset();
+  motion_base_provider_->Reset();
   // sence Reset function is not implemented
   ot_provider_manager_->Reset();
   kk13_ot_provider_manager_->Reset();
   mt_provider_->Reset();
   sp_provider_->Reset();
   sb_provider_->Reset();
+  register_->Reset();
 }
 
 void Backend::Clear() { register_->Clear(); }
