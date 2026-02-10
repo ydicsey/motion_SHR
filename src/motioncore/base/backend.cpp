@@ -122,36 +122,44 @@ void Backend::RunPreprocessing() {
 
   const bool needs_mts = mt_provider_->NeedMts();
   if (needs_mts) {
+    logger_->LogInfo("MTs are needed");
     mt_provider_->PreSetup();
   }
   const bool needs_sbs = sb_provider_->NeedSbs();
   if (needs_sbs) {
+    logger_->LogInfo("SBs are needed");
     sb_provider_->PreSetup();
   }
   const bool needs_sps = sp_provider_->NeedSps();
   if (needs_sps) {
+    logger_->LogInfo("SPs are needed");
     sp_provider_->PreSetup();
   }
 
   if (kk13_ot_provider_manager_->HasWork()) {
+    logger_->LogInfo("KK13 OTs are needed");
     kk13_ot_provider_manager_->PreSetup();
   }
 
   if (ot_provider_manager_->HasWork()) {
+    logger_->LogInfo("OTs are needed");
     ot_provider_manager_->PreSetup();
   }
 
   if (base_ot_provider_->HasWork()) {
+    logger_->LogInfo("Base OTs are needed");
     base_ot_provider_->PreSetup();
   }
 
   communication_layer_->Synchronize();
 
   if (base_ot_provider_->HasWork()) {
+    logger_->LogInfo("Computing Base OTs");
     base_ot_provider_->ComputeBaseOts();
   }
 
   if (ot_provider_manager_->HasWork() || kk13_ot_provider_manager_->HasWork()) {
+    logger_->LogInfo("Computing OT Extension");
     OtExtensionSetup();
   }
 
@@ -184,15 +192,51 @@ const GatePointer& Backend::GetGate(std::size_t gate_id) const {
 }
 
 void Backend::Reset() { 
-  base_ot_provider_->Reset();
-  motion_base_provider_->Reset();
-  // sence Reset function is not implemented
-  ot_provider_manager_->Reset();
-  kk13_ot_provider_manager_->Reset();
-  mt_provider_->Reset();
-  sp_provider_->Reset();
-  sb_provider_->Reset();
+  // base_ot_provider_->Reset();
+  // // motion_base_provider_->Reset();
+  // // fixed: Prg::Encrypt(std::size_t): Assertion `length > 0 && "assigning bytes to int should yield a positive value"' failed.
+  // ot_provider_manager_->Reset();
+  // kk13_ot_provider_manager_->Reset();
+  // mt_provider_->Reset();
+  // sp_provider_->Reset();
+  // sb_provider_->Reset();
+  // register_->Reset();
+  // // Reset BMR specific provider
+  // if (bmr_provider_) {
+  //   std::cout << "Resetting BMR provider..." << std::endl;
+  //   bmr_provider_->Reset(); // Assuming you implement this method
+  // }
+  base_ot_provider_.reset();
+  ot_provider_manager_.reset();
+  kk13_ot_provider_manager_.reset();
+  mt_provider_.reset();
+  sp_provider_.reset();
+  sb_provider_.reset();
   register_->Reset();
+  bmr_provider_.reset();
+  base_ot_provider_ = std::make_unique<BaseOtProvider>(*communication_layer_);
+  auto my_id = communication_layer_->GetMyId();
+
+  ot_provider_manager_ = std::make_unique<OtProviderManager>(
+      *communication_layer_, *base_ot_provider_, *motion_base_provider_);
+
+  kk13_ot_provider_manager_ = std::make_unique<Kk13OtProviderManager>(
+      *communication_layer_, *base_ot_provider_, *motion_base_provider_);
+
+  mt_provider_ = std::make_shared<MtProviderFromOts>(ot_provider_manager_->GetProviders(), my_id,
+                                                     logger_, run_time_statistics_.back());
+  sp_provider_ = std::make_shared<SpProviderFromOts>(ot_provider_manager_->GetProviders(), my_id,
+                                                     logger_, run_time_statistics_.back());
+  sb_provider_ = std::make_shared<SbProviderFromSps>(*communication_layer_, sp_provider_, logger_,
+                                                     run_time_statistics_.back());
+  bmr_provider_ = std::make_unique<proto::bmr::Provider>(*communication_layer_);
+  if (communication_layer_->GetNumberOfParties() == 2) {
+    garbled_circuit_provider_ =
+        proto::garbled_circuit::Provider::MakeProvider(*communication_layer_);
+  }
+
+  // TODO should probably throw if it has been already started
+  communication_layer_->Start();
 }
 
 void Backend::Clear() { register_->Clear(); }

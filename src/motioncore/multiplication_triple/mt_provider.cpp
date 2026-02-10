@@ -133,6 +133,8 @@ void MtProviderFromOts::Reset() {
   // reset ready flag/condition
   finished_.store(false);
   finished_condition_ = std::make_shared<FiberCondition>([this]() { return finished_.load(); });
+
+  finished_condition_->NotifyAll();
 }
 
 // needs completed OTExtension

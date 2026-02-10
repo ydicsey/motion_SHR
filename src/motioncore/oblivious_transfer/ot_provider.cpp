@@ -354,6 +354,7 @@ void OtProviderFromOtExtension::Reset() {
   if (data_.receiver_data.random_choices) {
     data_.receiver_data.random_choices->Clear();
   }
+  // motion_base_provider_.Reset();
   ResetSetupIsReady();
   // ResetOnlineIsReady();
 }
@@ -670,6 +671,8 @@ bool OtProviderManager::HasWork() {
 
 void OtProviderManager::Reset() {
   // std::cout << "OtProviderManager::Reset: " << providers_.size() << std::endl;
+  // providers_.at(party_id) = std::make_unique<OtProviderFromOtExtension>
+  // reset OtProviderFromOtExtension
   for (auto& provider : providers_) {
     if (provider) provider->Reset();
   }

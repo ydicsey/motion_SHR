@@ -98,14 +98,14 @@ SecureUnsignedInteger SecureUnsignedInteger::operator-(const SecureUnsignedInteg
              share_->Get()->GetRegister()->GetCachedAlgorithmDescription(path))) {
       if constexpr (kDebug) {
         logger_->LogDebug(
-            fmt::format("Found in cache Boolean integer addition circuit with file path {}", path));
+            fmt::format("Found in cache Boolean integer subtraction circuit with file path {}", path));
       }
     } else {
       subtraction_algorithm =
           std::make_shared<AlgorithmDescription>(AlgorithmDescription::FromBristol(path));
       assert(subtraction_algorithm);
       if constexpr (kDebug) {
-        logger_->LogDebug(fmt::format("Read Boolean integer addition circuit from file {}", path));
+        logger_->LogDebug(fmt::format("Read Boolean integer subtraction circuit from file {}", path));
       }
     }
     const auto share_input{ShareWrapper::Concatenate(std::vector{*share_, *other.share_})};
@@ -133,14 +133,14 @@ SecureUnsignedInteger SecureUnsignedInteger::operator*(const SecureUnsignedInteg
              share_->Get()->GetRegister()->GetCachedAlgorithmDescription(path))) {
       if constexpr (kDebug) {
         logger_->LogDebug(
-            fmt::format("Found in cache Boolean integer addition circuit with file path {}", path));
+            fmt::format("Found in cache Boolean integer multiplication circuit with file path {}", path));
       }
     } else {
       multiplication_algorithm =
           std::make_shared<AlgorithmDescription>(AlgorithmDescription::FromBristol(path));
       assert(multiplication_algorithm);
       if constexpr (kDebug) {
-        logger_->LogDebug(fmt::format("Read Boolean integer addition circuit from file {}", path));
+        logger_->LogDebug(fmt::format("Read Boolean integer multiplication circuit from file {}", path));
       }
     }
     const auto share_input{ShareWrapper::Concatenate(std::vector{*share_, *other.share_})};
@@ -167,14 +167,14 @@ SecureUnsignedInteger SecureUnsignedInteger::operator/(const SecureUnsignedInteg
     if ((division_algorithm = share_->Get()->GetRegister()->GetCachedAlgorithmDescription(path))) {
       if constexpr (kDebug) {
         logger_->LogDebug(
-            fmt::format("Found in cache Boolean integer addition circuit with file path {}", path));
+            fmt::format("Found in cache Boolean integer division circuit with file path {}", path));
       }
     } else {
       division_algorithm =
           std::make_shared<AlgorithmDescription>(AlgorithmDescription::FromBristol(path));
       assert(division_algorithm);
       if constexpr (kDebug) {
-        logger_->LogDebug(fmt::format("Read Boolean integer addition circuit from file {}", path));
+        logger_->LogDebug(fmt::format("Read Boolean integer division circuit from file {}", path));
       }
     }
     const auto share_input{ShareWrapper::Concatenate(std::vector{*share_, *other.share_})};

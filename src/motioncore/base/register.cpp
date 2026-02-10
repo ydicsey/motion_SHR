@@ -138,7 +138,6 @@ void Register::Reset() {
   gates_online_done_flag_ = false;
   gates_online_ = 0;
   gates_setup_ = 0;
-  
 }
 
 void Register::Clear() {

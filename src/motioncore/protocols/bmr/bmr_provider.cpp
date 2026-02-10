@@ -19,6 +19,15 @@ Provider::Provider(communication::CommunicationLayer& communication_layer)
   }
 }
 
+void Provider::Reset() {
+  // Re-randomize the global_offset_ for a fresh start
+  global_offset_ = Block128::MakeRandom();
+  // If you have any internal caches or registered futures not handled by MessageManager
+  // you would clear them here.
+  // For registered futures (like for input public values or garbled rows),
+  // these are typically managed by MessageManager, so individual clearing might not be needed.
+}
+
 Provider::~Provider() {}
 
 Provider::future_type Provider::RegisterForInputPublicValues(std::size_t input_owner,

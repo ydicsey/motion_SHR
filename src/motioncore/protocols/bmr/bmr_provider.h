@@ -49,6 +49,7 @@ class Provider {
   std::vector<future_type> RegisterForInputPublicValues(std::size_t gate_id);
   std::vector<future_type> RegisterForInputKeys(std::size_t gate_id);
   std::vector<future_type> RegisterForGarbledRows(std::size_t gate_id);
+  void Reset();
 
  private:
   communication::CommunicationLayer& communication_layer_;

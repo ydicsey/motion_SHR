@@ -54,6 +54,7 @@ void BaseOtProvider::Reset(){
     // std::cout<<"Resetting BaseOtData for party"<<std::endl;
     base_ot_data.Reset();
   }
+  // ResetOnlineIsReady();
 }
 
 BaseOtProvider::~BaseOtProvider() {}
