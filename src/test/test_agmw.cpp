@@ -672,6 +672,13 @@ TYPED_TEST(ArithmeticGmwTest, GreaterThan_1_1000_Simd_2_parties) {
         // compare the outputs
         auto circuit_result_1 = share_output_1.As<bool>();
         auto expected_result_1 = input_1.at(0) > input_1.at(1);
+        std::cout << "Input 1: " << input_1.at(0) << ", Input 2: " << input_1.at(1) << std::endl;
+        std::cout << "GT result:" << circuit_result_1 << " expected: " << expected_result_1 << std::endl;
+        // print share_greater_than_1's bit length and protocol for debugging
+        std::cout << "GT share bit length: " << share_greater_than_1->GetBitLength() << std::endl;
+        std::cout << "GT share protocol: "
+            << static_cast<int>(share_output_1->GetProtocol()) << std::endl;
+        
         EXPECT_EQ(circuit_result_1, expected_result_1);
 
         const auto circuit_result_1K = share_output_1K.As<std::vector<BitVector<>>>();
