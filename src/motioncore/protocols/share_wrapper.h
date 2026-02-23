@@ -99,6 +99,14 @@ class ShareWrapper {
 
   ShareWrapper operator>(const ShareWrapper& other) const;
 
+  ShareWrapper operator<(const ShareWrapper& other) const;
+
+  ShareWrapper operator>=(const ShareWrapper& other) const;
+
+  ShareWrapper operator<=(const ShareWrapper& other) const;
+
+  ShareWrapper operator!=(const ShareWrapper& other) const;
+
   // use this as the selection bit
   // returns this ? a : b
   ShareWrapper Mux(const ShareWrapper& a, const ShareWrapper& b) const;

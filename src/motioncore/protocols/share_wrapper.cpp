@@ -382,6 +382,26 @@ ShareWrapper ShareWrapper::operator>(const ShareWrapper& other) const {
   }
 }
 
+ShareWrapper ShareWrapper::operator<(const ShareWrapper& other) const {
+  // a < b  <=>  b > a
+  return other > *this;
+}
+
+ShareWrapper ShareWrapper::operator>=(const ShareWrapper& other) const {
+  // a >= b  <=>  !(a < b)
+  return ~(other > *this);
+}
+
+ShareWrapper ShareWrapper::operator<=(const ShareWrapper& other) const {
+  // a <= b  <=>  !(a > b)
+  return ~(*this > other);
+}
+
+ShareWrapper ShareWrapper::operator!=(const ShareWrapper& other) const {
+  // a != b  <=>  !(a == b)
+  return ~(*this == other);
+}
+
 ShareWrapper ShareWrapper::Mux(const ShareWrapper& a, const ShareWrapper& b) const {
   assert(*a);
   assert(*b);
@@ -389,14 +409,22 @@ ShareWrapper ShareWrapper::Mux(const ShareWrapper& a, const ShareWrapper& b) con
   assert(share_->GetProtocol() == a->GetProtocol());
   assert(share_->GetProtocol() == b->GetProtocol());
   assert(a->GetBitLength() == b->GetBitLength());
-  assert(share_->GetBitLength() == 1);
+  // assert(share_->GetBitLength() == 1);
 
+  // TODO implement
+  // throw std::runtime_error("C-OT-based Mux for Arithmetic GMW shares is not implemented yet");
   if (share_->GetProtocol() == MpcProtocol::kArithmeticGmw) {
-    // TODO implement
-    throw std::runtime_error("C-OT-based Mux for Arithmetic GMW shares is not implemented yet");
+    // s ? a : b  =>  b + s * (a - b)
+    assert(share_->GetBitLength() == a->GetBitLength());
+    assert(share_->GetNumberOfSimdValues() == a->GetNumberOfSimdValues());
+
+    auto diff = a - b;
+    auto mask = (*this) * diff;
+    return b + mask;
   }
 
   if (share_->GetProtocol() == MpcProtocol::kBooleanGmw) {
+    std::cout << "Using BooleanGMW MuxGate for Mux operation" << std::endl; 
     auto this_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(share_);
     auto a_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(*a);
     auto b_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(*b);
@@ -405,6 +433,7 @@ ShareWrapper ShareWrapper::Mux(const ShareWrapper& a, const ShareWrapper& b) con
     assert(a_gmw);
     assert(b_gmw);
 
+    // proto::boolean_gmw::MuxGate => c?a:b (c: a bit)
     auto mux_gate =
         share_->GetRegister()->EmplaceGate<proto::boolean_gmw::MuxGate>(a_gmw, b_gmw, this_gmw);
     return ShareWrapper(mux_gate->GetOutputAsShare());
