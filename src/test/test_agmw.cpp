@@ -615,7 +615,7 @@ TYPED_TEST_SUITE(ArithmeticGmwTest, all_uints);
 TYPED_TEST(ArithmeticGmwTest, GreaterThan_1_1000_Simd_2_parties) {
   using T = TypeParam;
   constexpr auto kArithmeticGmw = encrypto::motion::MpcProtocol::kArithmeticGmw;
-  auto number_of_parties = 2u;
+  auto number_of_parties = 3u;
   const std::vector<T> kZeroV_1K(1000, 0);
 
   // generate the input for both parties (smaller than 2^{bit_length - 1})
