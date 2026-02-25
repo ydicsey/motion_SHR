@@ -182,6 +182,10 @@ SecureUnsignedInteger SecureUnsignedInteger::operator/(const SecureUnsignedInteg
   }
 }
 
+ShareWrapper SecureUnsignedInteger::operator<(const SecureUnsignedInteger& other) const {
+  return other > *this;
+}
+
 ShareWrapper SecureUnsignedInteger::operator>(const SecureUnsignedInteger& other) const {
   if (share_->Get()->GetCircuitType() == CircuitType::kArithmetic) {
     if (share_->Get()->GetProtocol() == MpcProtocol::kArithmeticGmw) {

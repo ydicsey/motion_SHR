@@ -100,6 +100,8 @@ class SecureUnsignedInteger {
     return *this;
   }
 
+  ShareWrapper operator<(const SecureUnsignedInteger& other) const;
+
   ShareWrapper operator>(const SecureUnsignedInteger& other) const;
 
   ShareWrapper operator==(const SecureUnsignedInteger& other) const;
