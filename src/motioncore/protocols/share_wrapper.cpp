@@ -751,11 +751,19 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
 
   pointers_to_wires_of_split_share.resize(algorithm.number_of_wires, nullptr);
 
-  assert((algorithm.number_of_gates + number_of_input_wires) ==
-         pointers_to_wires_of_split_share.size());
+  // Materialize constant wires, if any, using constant Boolean inputs.
+  if (!algorithm.constant_wires.empty()) {
+    for (std::size_t i = 0; i < algorithm.constant_wires.size(); ++i) {
+      if (pointers_to_wires_of_split_share.at(i) != nullptr) continue;
+      if (!algorithm.constant_wires[i].has_value()) continue;
+      auto gate = share_->GetRegister()->EmplaceGate<proto::ConstantBooleanInputGate>(
+          *algorithm.constant_wires[i], share_->GetBackend());
+      pointers_to_wires_of_split_share.at(i) =
+          std::make_shared<ShareWrapper>(gate->GetOutputAsShare());
+    }
+  }
 
-  for (std::size_t wire_i = number_of_input_wires, gate_i = 0; wire_i < algorithm.number_of_wires;
-       ++wire_i, ++gate_i) {
+  for (std::size_t gate_i = 0; gate_i < algorithm.gates.size(); ++gate_i) {
     const auto& gate = algorithm.gates.at(gate_i);
     const auto type = gate.type;
     switch (type) {
@@ -780,6 +788,19 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
                                            *pointers_to_wires_of_split_share.at(*gate.parent_b));
         break;
       }
+      case PrimitiveOperationType::kMux: {
+        assert(gate.parent_b);
+        assert(gate.selection_bit);
+        const auto& sel = pointers_to_wires_of_split_share.at(*gate.selection_bit);
+        const auto& in0 = pointers_to_wires_of_split_share.at(gate.parent_a);
+        const auto& in1 = pointers_to_wires_of_split_share.at(*gate.parent_b);
+        if (!sel || !in0 || !in1) {
+          throw std::runtime_error("ShareWrapper::Evaluate: null input for MUX gate");
+        }
+        pointers_to_wires_of_split_share.at(gate.output_wire) =
+            std::make_shared<ShareWrapper>(sel->Mux(*in0, *in1));
+        break;
+      }
       case PrimitiveOperationType::kInv: {
         pointers_to_wires_of_split_share.at(gate.output_wire) =
             std::make_shared<ShareWrapper>(~*pointers_to_wires_of_split_share.at(gate.parent_a));
@@ -791,10 +812,17 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
   }
 
   std::vector<ShareWrapper> output;
-  output.reserve(pointers_to_wires_of_split_share.size() - algorithm.number_of_output_wires);
-  for (auto i = pointers_to_wires_of_split_share.size() - algorithm.number_of_output_wires;
-       i < pointers_to_wires_of_split_share.size(); i++) {
-    output.emplace_back(*pointers_to_wires_of_split_share.at(i));
+  if (!algorithm.output_wire_indices.empty()) {
+    output.reserve(algorithm.output_wire_indices.size());
+    for (auto idx : algorithm.output_wire_indices) {
+      output.emplace_back(*pointers_to_wires_of_split_share.at(idx));
+    }
+  } else {
+    output.reserve(algorithm.number_of_output_wires);
+    for (auto i = pointers_to_wires_of_split_share.size() - algorithm.number_of_output_wires;
+         i < pointers_to_wires_of_split_share.size(); i++) {
+      output.emplace_back(*pointers_to_wires_of_split_share.at(i));
+    }
   }
 
   return ShareWrapper::Concatenate(output);

@@ -64,6 +64,10 @@ struct AlgorithmDescription {
   std::size_t number_of_output_wires{0}, number_of_input_wires_parent_a{0}, number_of_wires{0},
       number_of_gates{0};
   std::optional<std::size_t> number_of_input_wires_parent_b{std::nullopt};
+  // Optional per-wire constant flags; std::nullopt means non-constant wire.
+  std::vector<std::optional<bool>> constant_wires;
+  // Explicit output wire indices; if empty, defaults to the last number_of_output_wires wires.
+  std::vector<std::size_t> output_wire_indices;
   std::vector<PrimitiveOperation> gates;
 };
 
