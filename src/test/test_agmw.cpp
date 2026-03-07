@@ -615,7 +615,7 @@ TYPED_TEST_SUITE(ArithmeticGmwTest, all_uints);
 TYPED_TEST(ArithmeticGmwTest, GreaterThan_1_1000_Simd_2_parties) {
   using T = TypeParam;
   constexpr auto kArithmeticGmw = encrypto::motion::MpcProtocol::kArithmeticGmw;
-  auto number_of_parties = 3u;
+  auto number_of_parties = 2u;
   const std::vector<T> kZeroV_1K(1000, 0);
 
   // generate the input for both parties (smaller than 2^{bit_length - 1})
@@ -641,7 +641,10 @@ TYPED_TEST(ArithmeticGmwTest, GreaterThan_1_1000_Simd_2_parties) {
         std::move(MakeLocallyConnectedParties(number_of_parties, kPortOffset)));
     for (auto& party : motion_parties) {
       party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
-      party->GetConfiguration()->SetOnlineAfterSetup(random_value() % 2 == 1);
+    }
+    const bool online_after_setup = (random_value() % 2 == 1);
+    for (auto& party : motion_parties) {
+      party->GetConfiguration()->SetOnlineAfterSetup(online_after_setup);
     }
 
     std::vector<std::thread> threads(number_of_parties);

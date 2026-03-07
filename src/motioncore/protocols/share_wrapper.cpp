@@ -424,7 +424,6 @@ ShareWrapper ShareWrapper::Mux(const ShareWrapper& a, const ShareWrapper& b) con
   }
 
   if (share_->GetProtocol() == MpcProtocol::kBooleanGmw) {
-    std::cout << "Using BooleanGMW MuxGate for Mux operation" << std::endl; 
     auto this_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(share_);
     auto a_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(*a);
     auto b_gmw = std::dynamic_pointer_cast<proto::boolean_gmw::Share>(*b);
@@ -763,29 +762,99 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
     }
   }
 
+  const auto make_boolean_constant = [&](bool value) {
+    auto gate = share_->GetRegister()->EmplaceGate<proto::ConstantBooleanInputGate>(value,
+                                                                                     share_->GetBackend());
+    return std::make_shared<ShareWrapper>(gate->GetOutputAsShare());
+  };
+
+  const auto is_boolean_constant = [](const std::shared_ptr<ShareWrapper>& wire) {
+    return wire && wire->Get() && wire->Get()->GetProtocol() == MpcProtocol::kBooleanConstant;
+  };
+
+  const auto get_boolean_constant = [&](const std::shared_ptr<ShareWrapper>& wire) {
+    assert(is_boolean_constant(wire));
+    auto constant_boolean_wire =
+        std::dynamic_pointer_cast<proto::ConstantBooleanWire>(wire->Get()->GetWires().at(0));
+    assert(constant_boolean_wire);
+    return constant_boolean_wire->GetValues()[0];
+  };
+
   for (std::size_t gate_i = 0; gate_i < algorithm.gates.size(); ++gate_i) {
     const auto& gate = algorithm.gates.at(gate_i);
     const auto type = gate.type;
     switch (type) {
       case PrimitiveOperationType::kXor: {
         assert(gate.parent_b);
-        pointers_to_wires_of_split_share.at(gate.output_wire) =
-            std::make_shared<ShareWrapper>(*pointers_to_wires_of_split_share.at(gate.parent_a) ^
-                                           *pointers_to_wires_of_split_share.at(*gate.parent_b));
+        const auto& in_a = pointers_to_wires_of_split_share.at(gate.parent_a);
+        const auto& in_b = pointers_to_wires_of_split_share.at(*gate.parent_b);
+        if (!in_a || !in_b || !in_a->Get() || !in_b->Get()) {
+          throw std::runtime_error(
+              fmt::format("ShareWrapper::Evaluate: null input for XOR gate at index {}", gate_i));
+        }
+
+        const bool a_const = is_boolean_constant(in_a);
+        const bool b_const = is_boolean_constant(in_b);
+        if (a_const && b_const) {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              make_boolean_constant(get_boolean_constant(in_a) ^ get_boolean_constant(in_b));
+        } else if (a_const || b_const) {
+          const bool c = a_const ? get_boolean_constant(in_a) : get_boolean_constant(in_b);
+          const auto& x = a_const ? in_b : in_a;
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              c ? std::make_shared<ShareWrapper>(~*x) : x;
+        } else {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              std::make_shared<ShareWrapper>(*in_a ^ *in_b);
+        }
         break;
       }
       case PrimitiveOperationType::kAnd: {
         assert(gate.parent_b);
-        pointers_to_wires_of_split_share.at(gate.output_wire) =
-            std::make_shared<ShareWrapper>(*pointers_to_wires_of_split_share.at(gate.parent_a) &
-                                           *pointers_to_wires_of_split_share.at(*gate.parent_b));
+        const auto& in_a = pointers_to_wires_of_split_share.at(gate.parent_a);
+        const auto& in_b = pointers_to_wires_of_split_share.at(*gate.parent_b);
+        if (!in_a || !in_b || !in_a->Get() || !in_b->Get()) {
+          throw std::runtime_error(
+              fmt::format("ShareWrapper::Evaluate: null input for AND gate at index {}", gate_i));
+        }
+
+        const bool a_const = is_boolean_constant(in_a);
+        const bool b_const = is_boolean_constant(in_b);
+        if (a_const && b_const) {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              make_boolean_constant(get_boolean_constant(in_a) & get_boolean_constant(in_b));
+        } else if (a_const || b_const) {
+          const bool c = a_const ? get_boolean_constant(in_a) : get_boolean_constant(in_b);
+          const auto& x = a_const ? in_b : in_a;
+          pointers_to_wires_of_split_share.at(gate.output_wire) = c ? x : make_boolean_constant(false);
+        } else {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              std::make_shared<ShareWrapper>(*in_a & *in_b);
+        }
         break;
       }
       case PrimitiveOperationType::kOr: {
         assert(gate.parent_b);
-        pointers_to_wires_of_split_share.at(gate.output_wire) =
-            std::make_shared<ShareWrapper>(*pointers_to_wires_of_split_share.at(gate.parent_a) |
-                                           *pointers_to_wires_of_split_share.at(*gate.parent_b));
+        const auto& in_a = pointers_to_wires_of_split_share.at(gate.parent_a);
+        const auto& in_b = pointers_to_wires_of_split_share.at(*gate.parent_b);
+        if (!in_a || !in_b || !in_a->Get() || !in_b->Get()) {
+          throw std::runtime_error(
+              fmt::format("ShareWrapper::Evaluate: null input for OR gate at index {}", gate_i));
+        }
+
+        const bool a_const = is_boolean_constant(in_a);
+        const bool b_const = is_boolean_constant(in_b);
+        if (a_const && b_const) {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              make_boolean_constant(get_boolean_constant(in_a) | get_boolean_constant(in_b));
+        } else if (a_const || b_const) {
+          const bool c = a_const ? get_boolean_constant(in_a) : get_boolean_constant(in_b);
+          const auto& x = a_const ? in_b : in_a;
+          pointers_to_wires_of_split_share.at(gate.output_wire) = c ? make_boolean_constant(true) : x;
+        } else {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              std::make_shared<ShareWrapper>(*in_a | *in_b);
+        }
         break;
       }
       case PrimitiveOperationType::kMux: {
@@ -794,16 +863,50 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
         const auto& sel = pointers_to_wires_of_split_share.at(*gate.selection_bit);
         const auto& in0 = pointers_to_wires_of_split_share.at(gate.parent_a);
         const auto& in1 = pointers_to_wires_of_split_share.at(*gate.parent_b);
-        if (!sel || !in0 || !in1) {
+        if (!sel || !in0 || !in1 || !sel->Get() || !in0->Get() || !in1->Get()) {
           throw std::runtime_error("ShareWrapper::Evaluate: null input for MUX gate");
         }
-        pointers_to_wires_of_split_share.at(gate.output_wire) =
-            std::make_shared<ShareWrapper>(sel->Mux(*in0, *in1));
+
+        const bool sel_const = is_boolean_constant(sel);
+        const bool in0_const = is_boolean_constant(in0);
+        const bool in1_const = is_boolean_constant(in1);
+        if (sel_const) {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              get_boolean_constant(sel) ? in1 : in0;
+        } else if (in0_const && in1_const) {
+          const bool c0 = get_boolean_constant(in0);
+          const bool c1 = get_boolean_constant(in1);
+          if (c0 == c1) {
+            pointers_to_wires_of_split_share.at(gate.output_wire) = make_boolean_constant(c0);
+          } else {
+            pointers_to_wires_of_split_share.at(gate.output_wire) =
+                c0 ? std::make_shared<ShareWrapper>(~*sel) : sel;
+          }
+        } else if (in0_const) {
+          const bool c0 = get_boolean_constant(in0);
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              c0 ? std::make_shared<ShareWrapper>((~*sel) | *in1)
+                 : std::make_shared<ShareWrapper>(*sel & *in1);
+        } else if (in1_const) {
+          const bool c1 = get_boolean_constant(in1);
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              c1 ? std::make_shared<ShareWrapper>(*sel | *in0)
+                 : std::make_shared<ShareWrapper>((~*sel) & *in0);
+        } else {
+          pointers_to_wires_of_split_share.at(gate.output_wire) =
+              std::make_shared<ShareWrapper>(sel->Mux(*in1, *in0));
+        }
         break;
       }
       case PrimitiveOperationType::kInv: {
+        const auto& in = pointers_to_wires_of_split_share.at(gate.parent_a);
+        if (!in || !in->Get()) {
+          throw std::runtime_error(
+              fmt::format("ShareWrapper::Evaluate: null input for INV gate at index {}", gate_i));
+        }
         pointers_to_wires_of_split_share.at(gate.output_wire) =
-            std::make_shared<ShareWrapper>(~*pointers_to_wires_of_split_share.at(gate.parent_a));
+            is_boolean_constant(in) ? make_boolean_constant(!get_boolean_constant(in))
+                                    : std::make_shared<ShareWrapper>(~*in);
         break;
       }
       default:
@@ -815,19 +918,28 @@ ShareWrapper ShareWrapper::Evaluate(const AlgorithmDescription& algorithm) const
   if (!algorithm.output_wire_indices.empty()) {
     output.reserve(algorithm.output_wire_indices.size());
     for (auto idx : algorithm.output_wire_indices) {
-      output.emplace_back(*pointers_to_wires_of_split_share.at(idx));
+      const auto& out_wire = pointers_to_wires_of_split_share.at(idx);
+      if (!out_wire || !out_wire->Get()) {
+        throw std::runtime_error(
+            fmt::format("ShareWrapper::Evaluate: null output wire at index {}", idx));
+      }
+      output.emplace_back(*out_wire);
     }
   } else {
     output.reserve(algorithm.number_of_output_wires);
     for (auto i = pointers_to_wires_of_split_share.size() - algorithm.number_of_output_wires;
          i < pointers_to_wires_of_split_share.size(); i++) {
-      output.emplace_back(*pointers_to_wires_of_split_share.at(i));
+      const auto& out_wire = pointers_to_wires_of_split_share.at(i);
+      if (!out_wire || !out_wire->Get()) {
+        throw std::runtime_error(
+            fmt::format("ShareWrapper::Evaluate: null fallback output wire at index {}", i));
+      }
+      output.emplace_back(*out_wire);
     }
   }
 
   return ShareWrapper::Concatenate(output);
 }
-
 void ShareWrapper::ShareConsistencyCheck() const {
   if (share_->GetWires().size() == 0) {
     throw std::invalid_argument("ShareWrapper::share_ has 0 wires");
@@ -1355,3 +1467,4 @@ ShareWrapper ShareWrapper::Simdify(std::span<SharePointer> input) {
 ShareWrapper ShareWrapper::Simdify(std::vector<ShareWrapper>&& input) { return Simdify(input); }
 
 }  // namespace encrypto::motion
+

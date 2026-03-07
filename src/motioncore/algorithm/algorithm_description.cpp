@@ -29,6 +29,7 @@
 #include <regex>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <fmt/format.h>
 #include <boost/algorithm/string/trim.hpp>
@@ -112,11 +113,15 @@ AlgorithmDescription AlgorithmDescription::FromBristol(std::ifstream& stream) {
     std::stringstream ss(line);
     // split line
     while (std::getline(ss, line, ' ')) {
-      line_vector.emplace_back(std::move(line));
+      boost::algorithm::trim(line);
+      if (!line.empty()) {
+        line_vector.emplace_back(std::move(line));
+      }
     }
 
     if (line_vector.empty()) continue;
-    const auto& type = line_vector.at(line_vector.size() - 1);
+    std::string type = line_vector.at(line_vector.size() - 1);
+    boost::algorithm::trim(type);
     PrimitiveOperation primitive_operation;
     if (type == std::string("XOR") || type == std::string("AND") || type == std::string("ADD") ||
         type == std::string("MUL") || type == std::string("OR")) {
@@ -312,11 +317,13 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
   AlgorithmDescription algorithm_description;
   assert(stream.is_open());
   assert(stream.good());
+
   std::string line;
   std::size_t server_inputs = 0, client_inputs = 0;
   std::size_t next_wire_id = 0;
   std::unordered_map<long long, std::size_t> wire_map;
   std::unordered_map<long long, bool> const_map;
+  std::unordered_set<long long> defined_wires;
 
   const auto map_wire = [&](long long external_id) -> std::size_t {
     auto it = wire_map.find(external_id);
@@ -326,24 +333,32 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
     return id;
   };
 
-  const auto get_const = [&](long long external_id) -> std::optional<bool> {
-    auto it = const_map.find(external_id);
-    if (it == const_map.end()) return std::nullopt;
+  const auto define_wire = [&](long long external_id) -> std::size_t {
+    auto [_, inserted] = defined_wires.emplace(external_id);
+    if (!inserted) {
+      throw std::runtime_error(fmt::format("Wire {} is redefined in ABY file", external_id));
+    }
+    return map_wire(external_id);
+  };
+
+  const auto require_defined_wire = [&](long long external_id,
+                                        const char* context) -> std::size_t {
+    if (defined_wires.find(external_id) == defined_wires.end()) {
+      throw std::runtime_error(fmt::format(
+          "Wire {} is used before definition in ABY file ({})", external_id, context));
+    }
+    auto it = wire_map.find(external_id);
+    assert(it != wire_map.end());
     return it->second;
   };
 
-  auto add_gate = [&](PrimitiveOperation gate) -> std::size_t {
-    gate.output_wire = next_wire_id++;
-    algorithm_description.gates.emplace_back(std::move(gate));
-    return gate.output_wire;
-  };
-
-  // Reverse IDs within fixed-size chunks (e.g., 64-bit words) to flip MSB->LSB order per value.
-  const auto reverse_chunks = [](std::vector<long long>& ids, std::size_t chunk) {
-    if (chunk == 0 || ids.empty() || ids.size() % chunk != 0) return;
-    for (std::size_t offset = 0; offset < ids.size(); offset += chunk) {
-      std::reverse(ids.begin() + offset, ids.begin() + offset + chunk);
+  const auto read_wire_ids = [](std::stringstream& ss) {
+    std::vector<long long> wire_ids;
+    long long wire_id = 0;
+    while (ss >> wire_id) {
+      wire_ids.push_back(wire_id);
     }
+    return wire_ids;
   };
 
   while (std::getline(stream, line)) {
@@ -354,250 +369,100 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
 
     const char identifier = line.front();
     if (identifier == '#') {
-      continue;  // comment line
+      continue;
     }
 
     std::stringstream ss(line);
-    ss >> std::ws;  // drop potential leading whitespace
+    ss >> std::ws;
+    char tag;
+    ss >> tag;
+    if (!ss || tag != identifier) {
+      throw std::runtime_error("Malformed line in ABY file");
+    }
 
     switch (identifier) {
       case 'C': {
-        char tag;
-        ss >> tag;
-        if (tag != 'C') {
-          throw std::runtime_error("Malformed client input declaration in ABY file");
-        }
-        std::vector<long long> wire_ids;
-        long long wire_id = 0;
-        while (ss >> wire_id) {
-          wire_ids.push_back(wire_id);
-        }
+        auto wire_ids = read_wire_ids(ss);
         client_inputs += wire_ids.size();
-        // ABY lists input bits MSB->LSB per value; reverse within 64-bit chunks to get LSB->MSB.
-        reverse_chunks(wire_ids, 64);
         for (auto id : wire_ids) {
-          map_wire(id);
+          define_wire(id);
         }
         break;
       }
       case 'S': {
-        char tag;
-        ss >> tag;
-        if (tag != 'S') {
-          throw std::runtime_error("Malformed server input declaration in ABY file");
-        }
-        std::vector<long long> wire_ids;
-        long long wire_id = 0;
-        while (ss >> wire_id) {
-          wire_ids.push_back(wire_id);
-        }
+        auto wire_ids = read_wire_ids(ss);
         server_inputs += wire_ids.size();
-        // ABY lists input bits MSB->LSB per value; reverse within 64-bit chunks to get LSB->MSB.
-        reverse_chunks(wire_ids, 64);
         for (auto id : wire_ids) {
-          map_wire(id);
+          define_wire(id);
         }
         break;
       }
       case 'O': {
-        char tag;
-        ss >> tag;
-        if (tag != 'O') {
-          throw std::runtime_error("Malformed output declaration in ABY file");
-        }
-        std::vector<long long> wire_ids;
-        long long wire_id = 0;
-        while (ss >> wire_id) {
-          wire_ids.push_back(wire_id);
-        }
-        // Keep outputs LSB->MSB per 64-bit value to match internal packing.
-        reverse_chunks(wire_ids, 64);
+        auto wire_ids = read_wire_ids(ss);
         algorithm_description.number_of_output_wires += wire_ids.size();
         for (auto id : wire_ids) {
-          algorithm_description.output_wire_indices.push_back(map_wire(id));
+          algorithm_description.output_wire_indices.push_back(require_defined_wire(id, "output"));
         }
         break;
       }
       case '0':
       case '1': {
-        char tag;
-        ss >> tag;
-        if (tag != '0' && tag != '1') {
-          throw std::runtime_error("Malformed constant declaration in ABY file");
-        }
         long long wire_id = 0;
         if (!(ss >> wire_id)) {
           throw std::runtime_error("Malformed constant declaration in ABY file");
         }
-        map_wire(wire_id);
+        define_wire(wire_id);
         const_map[wire_id] = (identifier == '1');
         break;
       }
       case 'A':
       case 'X':
       case 'V': {
-        char tag;
-        ss >> tag;
         long long in0_ext = 0, in1_ext = 0, out_ext = 0;
         if (!(ss >> in0_ext >> in1_ext >> out_ext)) {
           throw std::runtime_error("Malformed binary gate definition in ABY file");
         }
 
-        const auto c0 = get_const(in0_ext);
-        const auto c1 = get_const(in1_ext);
-        const auto w0 = c0 ? std::nullopt : std::optional<std::size_t>(map_wire(in0_ext));
-        const auto w1 = c1 ? std::nullopt : std::optional<std::size_t>(map_wire(in1_ext));
-
-        // Constant folding where possible
-        if (identifier == 'X') {
-          if (c0 && c1) {
-            map_wire(out_ext);
-            const_map[out_ext] = *c0 ^ *c1;
-            break;
-          }
-          if (c0 && *c0 == false) {
-            wire_map[out_ext] = w1.value();
-            break;
-          }
-          if (c1 && *c1 == false) {
-            wire_map[out_ext] = w0.value();
-            break;
-          }
-          if (c0 && *c0 == true) {
-            PrimitiveOperation gate;
-            gate.type = PrimitiveOperationType::kInv;
-            gate.parent_a = w1.value();
-            wire_map[out_ext] = add_gate(gate);
-            break;
-          }
-          if (c1 && *c1 == true) {
-            PrimitiveOperation gate;
-            gate.type = PrimitiveOperationType::kInv;
-            gate.parent_a = w0.value();
-            wire_map[out_ext] = add_gate(gate);
-            break;
-          }
-          PrimitiveOperation gate;
-          gate.type = PrimitiveOperationType::kXor;
-          gate.parent_a = w0.value();
-          gate.parent_b = w1.value();
-          wire_map[out_ext] = add_gate(gate);
-        } else if (identifier == 'A') {
-          if ((c0 && !*c0) || (c1 && !*c1)) {
-            map_wire(out_ext);
-            const_map[out_ext] = false;
-            break;
-          }
-          if (c0 && *c0) {
-            wire_map[out_ext] = w1.value();
-            break;
-          }
-          if (c1 && *c1) {
-            wire_map[out_ext] = w0.value();
-            break;
-          }
-          PrimitiveOperation gate;
+        PrimitiveOperation gate;
+        gate.parent_a = require_defined_wire(in0_ext, "binary gate input A");
+        gate.parent_b = require_defined_wire(in1_ext, "binary gate input B");
+        gate.output_wire = define_wire(out_ext);
+        if (identifier == 'A') {
           gate.type = PrimitiveOperationType::kAnd;
-          gate.parent_a = w0.value();
-          gate.parent_b = w1.value();
-          wire_map[out_ext] = add_gate(gate);
-        } else {  // OR
-          if ((c0 && *c0) || (c1 && *c1)) {
-            map_wire(out_ext);
-            const_map[out_ext] = true;
-            break;
-          }
-          if (c0 && !*c0) {
-            wire_map[out_ext] = w1.value();
-            break;
-          }
-          if (c1 && !*c1) {
-            wire_map[out_ext] = w0.value();
-            break;
-          }
-          PrimitiveOperation gate;
+        } else if (identifier == 'X') {
+          gate.type = PrimitiveOperationType::kXor;
+        } else {
           gate.type = PrimitiveOperationType::kOr;
-          gate.parent_a = w0.value();
-          gate.parent_b = w1.value();
-          wire_map[out_ext] = add_gate(gate);
         }
+        algorithm_description.gates.emplace_back(std::move(gate));
         break;
       }
       case 'M': {
-        char tag;
-        ss >> tag;
         long long in0_ext = 0, in1_ext = 0, sel_ext = 0, out_ext = 0;
         if (!(ss >> in0_ext >> in1_ext >> sel_ext >> out_ext)) {
           throw std::runtime_error("Malformed MUX gate definition in ABY file");
         }
 
-        const auto c0 = get_const(in0_ext);
-        const auto c1 = get_const(in1_ext);
-        const auto csel = get_const(sel_ext);
-        const auto w0 = c0 ? std::nullopt : std::optional<std::size_t>(map_wire(in0_ext));
-        const auto w1 = c1 ? std::nullopt : std::optional<std::size_t>(map_wire(in1_ext));
-        const auto wsel = csel ? std::nullopt : std::optional<std::size_t>(map_wire(sel_ext));
-
-        if (csel) {
-          if (*csel) {
-            if (c1) {
-              map_wire(out_ext);
-              const_map[out_ext] = *c1;
-            } else {
-              wire_map[out_ext] = w1.value();
-            }
-          } else {
-            if (c0) {
-              map_wire(out_ext);
-              const_map[out_ext] = *c0;
-            } else {
-              wire_map[out_ext] = w0.value();
-            }
-          }
-          break;
-        }
-
-        if (w0 && w1 && *w0 == *w1) {
-          wire_map[out_ext] = *w0;
-          break;
-        }
-
-        if (c0 && c1) {
-          map_wire(out_ext);
-          const_map[out_ext] = *csel ? *c1 : *c0;
-          break;
-        }
-
-        if (c0 || c1) {
-          throw std::runtime_error("MUX with constant data inputs in ABY file is not supported");
-        }
-
         PrimitiveOperation gate;
         gate.type = PrimitiveOperationType::kMux;
-        gate.parent_a = w0.value();
-        gate.parent_b = w1.value();
-        gate.selection_bit = wsel.value();
-        wire_map[out_ext] = add_gate(gate);
+        gate.parent_a = require_defined_wire(in0_ext, "MUX input A");
+        gate.parent_b = require_defined_wire(in1_ext, "MUX input B");
+        gate.selection_bit = require_defined_wire(sel_ext, "MUX selection");
+        gate.output_wire = define_wire(out_ext);
+        algorithm_description.gates.emplace_back(std::move(gate));
         break;
       }
       case 'I': {
-        char tag;
-        ss >> tag;
         long long in_ext = 0, out_ext = 0;
         if (!(ss >> in_ext >> out_ext)) {
           throw std::runtime_error("Malformed INV gate definition in ABY file");
         }
 
-        if (auto c = get_const(in_ext)) {
-          map_wire(out_ext);
-          const_map[out_ext] = !*c;
-          break;
-        }
-
         PrimitiveOperation gate;
         gate.type = PrimitiveOperationType::kInv;
-        gate.parent_a = map_wire(in_ext);
-        wire_map[out_ext] = add_gate(gate);
+        gate.parent_a = require_defined_wire(in_ext, "INV input");
+        gate.output_wire = define_wire(out_ext);
+        algorithm_description.gates.emplace_back(std::move(gate));
         break;
       }
       default:
@@ -605,11 +470,10 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
     }
   }
 
-  // Resize constant_wires and fill values
   algorithm_description.constant_wires.assign(next_wire_id, std::nullopt);
   for (const auto& [ext, value] : const_map) {
     auto it = wire_map.find(ext);
-    if (it == wire_map.end()) continue;
+    assert(it != wire_map.end());
     algorithm_description.constant_wires.at(it->second) = value;
   }
 
@@ -628,3 +492,8 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
 }
 
 }  // namespace encrypto::motion
+
+
+
+
+

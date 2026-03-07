@@ -1,5 +1,6 @@
 add_executable(motiontest
         test_aesni.cpp
+        test_aby_format.cpp
         test_agmw.cpp
         test_astra.cpp
         test_base_ot.cpp
@@ -11,6 +12,7 @@ add_executable(motiontest
         test_communication_layer.cpp
         test_conversions.cpp
         test_dummy_transport.cpp
+        test_float.cpp
         test_garbled_circuit.cpp
         test_integer_operations.cpp
         test_kk13_ot.cpp
@@ -36,3 +38,11 @@ target_link_libraries(motiontest PRIVATE
         OpenMP::OpenMP_CXX
         gtest dl
         )
+
+
+if (MSVC)
+    target_compile_options(motiontest PRIVATE /FI"${CMAKE_CURRENT_SOURCE_DIR}/test_gtest_extensions.h")
+else ()
+    target_compile_options(motiontest PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/test_gtest_extensions.h")
+endif ()
+
