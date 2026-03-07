@@ -1,0 +1,9 @@
+# fromaby mux-const fixture
+S 0
+C
+0 -2
+1 -3
+#Gates
+M -2 -3 0 1
+O 1
+
