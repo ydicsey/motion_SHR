@@ -24,6 +24,10 @@
 
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <array>
+#include <cstdint>
+#include <filesystem>
+#include <thread>
 #include <fstream>
 #include <limits>
 #include <random>
@@ -82,6 +86,101 @@ TEST(AlgorithmDescription, FromBristolFormatIntAdd8Size) {
   EXPECT_EQ(gate33.selection_bit.has_value(), false);
 }
 
+constexpr auto kAbyIntDivProtocol = encrypto::motion::MpcProtocol::kBooleanGmw;
+const std::array<std::size_t, 4> kAbyIntDivPartyCounts = {2u, 3u, 5u, 10u};
+
+std::uint64_t EvaluateAbyIntDiv64AndOpenToParty0(std::uint64_t dividend, std::uint64_t divisor,
+                                                 std::size_t number_of_parties) {
+  if (number_of_parties < 2) {
+    throw std::invalid_argument("Need at least two parties for ABY integer division evaluation");
+  }
+
+  const auto algorithm = encrypto::motion::AlgorithmDescription::FromAby(
+      std::string(encrypto::motion::kRootDir) + "/circuits/aby/int/int_div_64.aby");
+
+  const auto dividend_input = encrypto::motion::ToInput(dividend);
+  const auto divisor_input = encrypto::motion::ToInput(divisor);
+
+  const std::vector<encrypto::motion::BitVector<>> zeros_dividend(
+      dividend_input.size(), encrypto::motion::BitVector<>(1, false));
+  const std::vector<encrypto::motion::BitVector<>> zeros_divisor(
+      divisor_input.size(), encrypto::motion::BitVector<>(1, false));
+
+  auto parties = encrypto::motion::MakeLocallyConnectedParties(number_of_parties, kPortOffset);
+  for (auto& party : parties) {
+    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
+    party->GetConfiguration()->SetOnlineAfterSetup(true);
+  }
+
+  std::vector<encrypto::motion::ShareWrapper> outputs(number_of_parties);
+  for (std::size_t party_id = 0; party_id < number_of_parties; ++party_id) {
+    auto& party = parties.at(party_id);
+    auto local_dividend = (party_id == 0) ? dividend_input : zeros_dividend;
+    auto local_divisor = (party_id == 1) ? divisor_input : zeros_divisor;
+
+    const encrypto::motion::ShareWrapper share_dividend(
+        party->In<kAbyIntDivProtocol>(std::move(local_dividend), 0));
+    const encrypto::motion::ShareWrapper share_divisor(
+        party->In<kAbyIntDivProtocol>(std::move(local_divisor), 1));
+
+    const auto concatenated = encrypto::motion::ShareWrapper::Concatenate(
+        std::vector<encrypto::motion::ShareWrapper>{share_dividend, share_divisor});
+    outputs.at(party_id) = concatenated.Evaluate(algorithm).Out(0);
+  }
+
+  std::vector<encrypto::motion::BitVector<>> opened_output;
+  std::vector<std::thread> threads;
+  threads.reserve(number_of_parties);
+  for (std::size_t party_id = 0; party_id < number_of_parties; ++party_id) {
+    threads.emplace_back([party_id, &parties, &outputs, &opened_output]() {
+      auto& party = parties.at(party_id);
+      party->Run();
+      if (party_id == 0) {
+        opened_output = outputs.at(party_id).As<std::vector<encrypto::motion::BitVector<>>>();
+      }
+      party->Finish();
+    });
+  }
+  for (auto& thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+
+  EXPECT_EQ(opened_output.size(), 64u);
+  if (opened_output.size() != 64u) {
+    throw std::runtime_error("Unexpected ABY int-div output bit length");
+  }
+  return encrypto::motion::ToOutput<std::uint64_t>(opened_output);
+}
+
+TEST(IntMpc64, FromAbyDiv64_2_3_5_10_parties) {
+  const auto aby_int_div_path =
+      std::filesystem::path(encrypto::motion::kRootDir) / "circuits" / "aby" / "int" /
+      "int_div_64.aby";
+
+  if (!std::filesystem::exists(aby_int_div_path)) {
+    GTEST_SKIP() << "Missing ABY integer-division circuit: " << aby_int_div_path.string();
+  }
+
+  const std::vector<std::pair<std::uint64_t, std::uint64_t>> cases = {
+      {144u, 12u},
+      {1000u, 7u},
+      {1ull << 40, 1024u},
+      {1234567890123ull, 37u},
+      {(1ull << 62) + 12345u, 65535u},
+  };
+
+  for (const auto number_of_parties : kAbyIntDivPartyCounts) {
+    for (std::size_t i = 0; i < cases.size(); ++i) {
+      const auto [dividend, divisor] = cases.at(i);
+      const auto result = EvaluateAbyIntDiv64AndOpenToParty0(dividend, divisor, number_of_parties);
+      const auto expected = dividend / divisor;
+      EXPECT_EQ(result, expected) << "parties=" << number_of_parties << " case=" << i
+                                  << " dividend=" << dividend << " divisor=" << divisor;
+    }
+  }
+}
 // TODO: rewrite as generic tests
 template <typename T>
 class SecureUintTest : public ::testing::Test {
