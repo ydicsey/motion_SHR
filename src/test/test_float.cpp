@@ -6,10 +6,12 @@
 #include <array>
 #include <bit>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <future>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -138,6 +140,41 @@ std::vector<std::size_t> GetFloatPartyCounts() {
   }
   return std::vector<std::size_t>(kNumberOfPartiesList.begin(), kNumberOfPartiesList.end());
 }
+std::size_t GetFloatRandomTrialCount() {
+  constexpr std::size_t kDefaultTrials = 2;
+  if (const char* env = std::getenv("MOTION_FLOAT_RANDOM_TRIALS"); env != nullptr && *env != '\0') {
+    const auto value = static_cast<std::size_t>(std::stoull(env, nullptr, 10));
+    if (value == 0u) {
+      throw std::invalid_argument("MOTION_FLOAT_RANDOM_TRIALS must be >= 1");
+    }
+    return value;
+  }
+  return kDefaultTrials;
+}
+
+std::uint64_t GetFloatRandomSeed() {
+  constexpr std::uint64_t kDefaultSeed = 0x4d6f74696f6e464cULL;
+  if (const char* env = std::getenv("MOTION_FLOAT_RANDOM_SEED"); env != nullptr && *env != '\0') {
+    return std::stoull(env, nullptr, 0);
+  }
+  return kDefaultSeed;
+}
+
+std::mt19937_64 MakeFloatRandomGenerator(std::size_t number_of_parties, std::uint64_t test_id) {
+  return std::mt19937_64(GetFloatRandomSeed() ^ (static_cast<std::uint64_t>(number_of_parties) << 32) ^
+                         test_id);
+}
+
+double SampleUniformDouble(std::mt19937_64& generator, double low, double high) {
+  std::uniform_real_distribution<double> distribution(low, high);
+  return distribution(generator);
+}
+
+double SampleSignedNonZeroDouble(std::mt19937_64& generator, double min_abs, double max_abs) {
+  const auto magnitude = SampleUniformDouble(generator, min_abs, max_abs);
+  return std::bernoulli_distribution(0.5)(generator) ? magnitude : -magnitude;
+}
+
 TEST_P(AbyFloat64ParserTest, FromAbyParsesCircuit) {
   const auto path = std::string(encrypto::motion::kRootDir) + "/" + GetParam();
   const auto metadata = ReadAbyMetadata(path);
@@ -361,102 +398,143 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
 }
 
 TEST(FloatMpc64, FromAbyCmp64_2_3_4_5_10_parties) {
-  const std::vector<std::tuple<double, double, bool>> cases = {
-      {2.0, 1.0, true},
-      {1.0, 2.0, false},
-      {-1.0, -2.0, true},
-      {0.0, 0.0, false},
-  };
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    for (std::size_t i = 0; i < cases.size(); ++i) {
-      const auto [a, b, expected] = cases[i];
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xc64001ULL);
+
+    const auto equal_value = SampleUniformDouble(generator, -100.0, 100.0);
+    EXPECT_EQ(EvaluateFloat64CmpGtAbyAndOpenToParty0(equal_value, equal_value, number_of_parties), false)
+        << "parties=" << number_of_parties << " case=equal a=" << equal_value
+        << " b=" << equal_value;
+
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto b = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto expected = a > b;
       EXPECT_EQ(EvaluateFloat64CmpGtAbyAndOpenToParty0(a, b, number_of_parties), expected)
-          << "parties=" << number_of_parties << " case #" << i << " a=" << a << " b=" << b;
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a << " b=" << b;
     }
   }
 }
 
 TEST(FloatMpc64, FromAbyAdd64_2_3_4_5_10_parties) {
-  const double a = 5.5;
-  const double b = 1.25;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_add_64.aby", a, b, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(a + b);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xa64002ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto b = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_add_64.aby", a, b, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(a + b);
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a << " b=" << b;
+    }
   }
 }
 
 TEST(FloatMpc64, FromAbySub64_2_3_4_5_10_parties) {
-  const double a = 5.5;
-  const double b = 2.25;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_sub_64.aby", a, b, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(a - b);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xb64003ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto b = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_sub_64.aby", a, b, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(a - b);
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a << " b=" << b;
+    }
   }
 }
 
 TEST(FloatMpc64, FromAbyMul64_2_3_4_5_10_parties) {
-  const double a = 1.5;
-  const double b = 2.0;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_mult_64.aby", a, b, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(a * b);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xd64004ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -10.0, 10.0);
+      const auto b = SampleUniformDouble(generator, -10.0, 10.0);
+      const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_mult_64.aby", a, b, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(a * b);
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a << " b=" << b;
+    }
   }
 }
 
 TEST(FloatMpc64, DISABLED_FromAbySqr64_2_3_4_5_10_parties) {
-  const double a = 1.5;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64UnaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_sqr_64.aby", a, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(a * a);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xe64005ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -10.0, 10.0);
+      const auto result_bits = EvaluateFloat64UnaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_sqr_64.aby", a, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(a * a);
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a;
+    }
   }
 }
 
 TEST(FloatMpc64, FromAbySqrt64_2_3_4_5_10_parties) {
-  const double a = 4.0;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64UnaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_sqrt_64.aby", a, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(2.0);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0xf64006ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, 0.0, 100.0);
+      const auto result_bits = EvaluateFloat64UnaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_sqrt_64.aby", a, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(std::sqrt(a));
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a;
+    }
   }
 }
 
 TEST(FloatMpc64, FromBristolI2fThenFromAbyAdd64_2_3_4_5_10_parties) {
-  const std::int64_t int_value = 3;
-  const double float_value = 2.25;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits =
-        EvaluateI2fThenAbyAdd64AndOpenToParty0(int_value, float_value, number_of_parties);
-    const auto expected_bits =
-        std::bit_cast<std::uint64_t>(static_cast<double>(int_value) + float_value);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0x164007ULL);
+    std::uniform_int_distribution<std::int64_t> int_distribution(-1000000, 1000000);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto int_value = int_distribution(generator);
+      const auto float_value = SampleUniformDouble(generator, -1000.0, 1000.0);
+      const auto result_bits =
+          EvaluateI2fThenAbyAdd64AndOpenToParty0(int_value, float_value, number_of_parties);
+      const auto expected_bits =
+          std::bit_cast<std::uint64_t>(static_cast<double>(int_value) + float_value);
+      EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties
+                                            << " trial=" << trial << " int=" << int_value
+                                            << " float=" << float_value;
+    }
   }
 }
 
 TEST(FloatMpc64, FromAbyDiv64_2_3_4_5_10_parties) {
-  const double a = 7.5;
-  const double b = 2.5;
+  const auto trial_count = GetFloatRandomTrialCount();
 
   for (const auto number_of_parties : GetFloatPartyCounts()) {
-    const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
-        "circuits/aby/float/fp_nostatus_div_64.aby", a, b, number_of_parties);
-    const auto expected_bits = std::bit_cast<std::uint64_t>(a / b);
-    EXPECT_EQ(result_bits, expected_bits) << "parties=" << number_of_parties;
+    auto generator = MakeFloatRandomGenerator(number_of_parties, 0x264008ULL);
+    for (std::size_t trial = 0; trial < trial_count; ++trial) {
+      const auto a = SampleUniformDouble(generator, -100.0, 100.0);
+      const auto b = SampleSignedNonZeroDouble(generator, 0.5, 10.0);
+      const auto result_bits = EvaluateFloat64BinaryAbyAndOpenToParty0(
+          "circuits/aby/float/fp_nostatus_div_64.aby", a, b, number_of_parties);
+      const auto expected_bits = std::bit_cast<std::uint64_t>(a / b);
+      EXPECT_EQ(result_bits, expected_bits)
+          << "parties=" << number_of_parties << " trial=" << trial << " a=" << a << " b=" << b;
+    }
   }
 }
 

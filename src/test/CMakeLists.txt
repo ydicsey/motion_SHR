@@ -19,6 +19,7 @@ add_executable(motiontest
         test_kk13_ot_flavors.cpp
         test_low_depth_reduce.cpp
         test_misc.cpp
+        test_party_lifecycle.cpp
         test_motion_main.cpp
         test_mt.cpp
         test_ot.cpp
