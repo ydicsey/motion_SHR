@@ -594,6 +594,91 @@ TYPED_TEST(SecureUintTest, AdditionInGmw) {
     if (t.joinable()) t.join();
 }
 
+TYPED_TEST(SecureUintTest, ShiftInGmw) {
+  using T = TypeParam;
+  constexpr auto kBooleanGmw = encrypto::motion::MpcProtocol::kBooleanGmw;
+  constexpr auto kNumberOfWires{sizeof(T) * 8};
+  constexpr std::size_t kNumberOfSimd{1};
+  constexpr std::size_t kShift{3};
+
+  std::mt19937 mersenne_twister(sizeof(T) + 13);
+  std::uniform_int_distribution<T> distribution(0, std::numeric_limits<T>::max());
+  auto random = std::bind(distribution, mersenne_twister);
+  const T raw_global_input = random();
+
+  std::vector<std::vector<encrypto::motion::BitVector<>>> global_input{
+      encrypto::motion::ToInput(raw_global_input)};
+  std::vector<encrypto::motion::BitVector<>> dummy_input(
+      kNumberOfWires, encrypto::motion::BitVector<>(kNumberOfSimd, false));
+
+  std::vector<PartyPointer> motion_parties(std::move(MakeLocallyConnectedParties(2, kPortOffset)));
+  for (auto& party : motion_parties) {
+    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
+    party->GetConfiguration()->SetOnlineAfterSetup(true);
+  }
+
+  std::vector<std::thread> threads;
+  for (auto party_id = 0u; party_id < motion_parties.size(); ++party_id) {
+    threads.emplace_back(
+        [party_id, &motion_parties, &global_input, &dummy_input, raw_global_input, kNumberOfWires,
+         kShift]() {
+          encrypto::motion::ShareWrapper share =
+              party_id == 0 ? motion_parties.at(party_id)->In<kBooleanGmw>(global_input.at(0), 0)
+                            : motion_parties.at(party_id)->In<kBooleanGmw>(dummy_input, 0);
+
+          auto share_shift_left = (share << kShift).Out();
+          auto share_shift_right = (share >> kShift).Out();
+          auto share_shift_left_large = (share << kNumberOfWires).Out();
+          auto share_shift_right_large = (share >> kNumberOfWires).Out();
+
+          motion_parties.at(party_id)->Run();
+
+          std::vector<encrypto::motion::BitVector<>> output_left, output_right;
+          std::vector<encrypto::motion::BitVector<>> output_left_large, output_right_large;
+          output_left.reserve(kNumberOfWires);
+          output_right.reserve(kNumberOfWires);
+          output_left_large.reserve(kNumberOfWires);
+          output_right_large.reserve(kNumberOfWires);
+
+          for (auto i = 0ull; i < kNumberOfWires; ++i) {
+            auto wire_left = std::dynamic_pointer_cast<encrypto::motion::proto::boolean_gmw::Wire>(
+                share_shift_left->GetWires().at(i));
+            auto wire_right = std::dynamic_pointer_cast<encrypto::motion::proto::boolean_gmw::Wire>(
+                share_shift_right->GetWires().at(i));
+            auto wire_left_large = std::dynamic_pointer_cast<encrypto::motion::proto::boolean_gmw::Wire>(
+                share_shift_left_large->GetWires().at(i));
+            auto wire_right_large =
+                std::dynamic_pointer_cast<encrypto::motion::proto::boolean_gmw::Wire>(
+                    share_shift_right_large->GetWires().at(i));
+
+            assert(wire_left);
+            assert(wire_right);
+            assert(wire_left_large);
+            assert(wire_right_large);
+
+            output_left.emplace_back(wire_left->GetValues());
+            output_right.emplace_back(wire_right->GetValues());
+            output_left_large.emplace_back(wire_left_large->GetValues());
+            output_right_large.emplace_back(wire_right_large->GetValues());
+          }
+
+          const T expected_left = static_cast<T>(raw_global_input << kShift);
+          const T expected_right = static_cast<T>(raw_global_input >> kShift);
+          const T expected_zero = static_cast<T>(0);
+
+          EXPECT_EQ(encrypto::motion::ToOutput<T>(output_left), expected_left);
+          EXPECT_EQ(encrypto::motion::ToOutput<T>(output_right), expected_right);
+          EXPECT_EQ(encrypto::motion::ToOutput<T>(output_left_large), expected_zero);
+          EXPECT_EQ(encrypto::motion::ToOutput<T>(output_right_large), expected_zero);
+
+          motion_parties.at(party_id)->Finish();
+        });
+  }
+
+  for (auto& t : threads) {
+    if (t.joinable()) t.join();
+  }
+}
 TYPED_TEST(SecureUintTest, AdditionInGarbledCircuit) {
   using T = TypeParam;
   constexpr auto kGc = encrypto::motion::MpcProtocol::kGarbledCircuit;
@@ -1468,6 +1553,53 @@ TYPED_TEST(SecureUintTest, AsUintInArithmeticGmw) {
       const T result = share_output.As<T>();
 
       EXPECT_EQ(result, input);
+      parties.at(party_id)->Finish();
+    });
+  }
+  for (auto& t : threads)
+    if (t.joinable()) t.join();
+}
+
+TYPED_TEST(SecureUintTest, ShiftInArithmeticGmw) {
+  using T = TypeParam;
+  constexpr auto kArithmeticGmw = encrypto::motion::MpcProtocol::kArithmeticGmw;
+  constexpr auto kNumberOfWires{sizeof(T) * 8};
+  constexpr std::size_t kShift{3};
+  std::mt19937 mersenne_twister(sizeof(T) + 29);
+  std::uniform_int_distribution<T> distribution(0, std::numeric_limits<T>::max());
+  auto random = std::bind(distribution, mersenne_twister);
+  const T input = random(), dummy_input = random();
+
+  std::vector<PartyPointer> parties(std::move(MakeLocallyConnectedParties(2, kPortOffset)));
+  for (auto& party : parties) {
+    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
+    party->GetConfiguration()->SetOnlineAfterSetup(true);
+  }
+
+  std::vector<std::thread> threads;
+  for (auto party_id = 0u; party_id < parties.size(); ++party_id) {
+    threads.emplace_back([party_id, &parties, input, dummy_input]() {
+      const bool party_0 = parties.at(party_id)->GetConfiguration()->GetMyId() == 0;
+      encrypto::motion::SecureUnsignedInteger share =
+          party_0 ? parties.at(party_id)->In<kArithmeticGmw>(input, 0)
+                  : parties.at(party_id)->In<kArithmeticGmw>(dummy_input, 0);
+
+      auto share_shift_left = (share << kShift).Out();
+      auto share_shift_right = (share >> kShift).Out();
+      auto share_shift_left_large = (share << kNumberOfWires).Out();
+      auto share_shift_right_large = (share >> kNumberOfWires).Out();
+
+      parties.at(party_id)->Run();
+
+      const T expected_left = static_cast<T>(input << kShift);
+      const T expected_right = static_cast<T>(input >> kShift);
+      const T expected_zero = static_cast<T>(0);
+
+      EXPECT_EQ(share_shift_left.As<T>(), expected_left);
+      EXPECT_EQ(share_shift_right.As<T>(), expected_right);
+      EXPECT_EQ(share_shift_left_large.As<T>(), expected_zero);
+      EXPECT_EQ(share_shift_right_large.As<T>(), expected_zero);
+
       parties.at(party_id)->Finish();
     });
   }

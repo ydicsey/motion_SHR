@@ -91,7 +91,24 @@ class ShareWrapper {
     *this = *this * other;
     return *this;
   }
-  
+
+  ShareWrapper ShiftLeft(std::size_t amount) const;
+
+  ShareWrapper ShiftRight(std::size_t amount) const;
+
+  ShareWrapper operator<<(std::size_t amount) const { return ShiftLeft(amount); }
+
+  ShareWrapper operator>>(std::size_t amount) const { return ShiftRight(amount); }
+
+  ShareWrapper& operator<<=(std::size_t amount) {
+    *this = ShiftLeft(amount);
+    return *this;
+  }
+
+  ShareWrapper& operator>>=(std::size_t amount) {
+    *this = ShiftRight(amount);
+    return *this;
+  }  
   friend ShareWrapper DotProduct(std::span<ShareWrapper> a, std::span<ShareWrapper> b);
 
 

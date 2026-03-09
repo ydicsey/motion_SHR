@@ -182,6 +182,21 @@ SecureUnsignedInteger SecureUnsignedInteger::operator/(const SecureUnsignedInteg
   }
 }
 
+SecureUnsignedInteger SecureUnsignedInteger::ShiftLeft(std::size_t amount) const {
+  if (!share_) {
+    throw std::runtime_error("ShiftLeft called on an empty SecureUnsignedInteger");
+  }
+
+  return SecureUnsignedInteger(share_->ShiftLeft(amount));
+}
+
+SecureUnsignedInteger SecureUnsignedInteger::ShiftRight(std::size_t amount) const {
+  if (!share_) {
+    throw std::runtime_error("ShiftRight called on an empty SecureUnsignedInteger");
+  }
+
+  return SecureUnsignedInteger(share_->ShiftRight(amount));
+}
 ShareWrapper SecureUnsignedInteger::operator<(const SecureUnsignedInteger& other) const {
   return other > *this;
 }

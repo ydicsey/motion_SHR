@@ -100,6 +100,23 @@ class SecureUnsignedInteger {
     return *this;
   }
 
+  // logical bit shifts on the unsigned integer bit representation
+  SecureUnsignedInteger ShiftLeft(std::size_t amount) const;
+  SecureUnsignedInteger ShiftRight(std::size_t amount) const;
+
+  SecureUnsignedInteger operator<<(std::size_t amount) const { return ShiftLeft(amount); }
+  SecureUnsignedInteger operator>>(std::size_t amount) const { return ShiftRight(amount); }
+
+  SecureUnsignedInteger& operator<<=(std::size_t amount) {
+    *this = ShiftLeft(amount);
+    return *this;
+  }
+
+  SecureUnsignedInteger& operator>>=(std::size_t amount) {
+    *this = ShiftRight(amount);
+    return *this;
+  }
+
   ShareWrapper operator<(const SecureUnsignedInteger& other) const;
 
   ShareWrapper operator>(const SecureUnsignedInteger& other) const;

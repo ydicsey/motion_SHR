@@ -308,6 +308,97 @@ ShareWrapper ShareWrapper::operator*(const ShareWrapper& other) const {
   }
 }
 
+ShareWrapper ShareWrapper::ShiftLeft(std::size_t amount) const {
+  if (!share_) {
+    throw std::runtime_error("ShiftLeft called on an empty ShareWrapper");
+  }
+
+  const auto bitlength = share_->GetBitLength();
+  if (bitlength == 0) {
+    throw std::runtime_error("ShiftLeft called on a ShareWrapper with bitlength 0");
+  }
+
+  const auto shift_boolean_share = [bitlength](const ShareWrapper& boolean_share,
+                                               std::size_t shift_amount,
+                                               bool left_shift) {
+    auto split = boolean_share.Split();
+    assert(!split.empty());
+    auto zero_wire = split.at(0) ^ split.at(0);
+    std::vector<ShareWrapper> shifted(bitlength, zero_wire);
+
+    if (shift_amount < bitlength) {
+      if (left_shift) {
+        for (std::size_t i = shift_amount; i < bitlength; ++i) {
+          shifted.at(i) = split.at(i - shift_amount);
+        }
+      } else {
+        for (std::size_t i = 0; i + shift_amount < bitlength; ++i) {
+          shifted.at(i) = split.at(i + shift_amount);
+        }
+      }
+    }
+
+    return ShareWrapper::Concatenate(shifted);
+  };
+
+  if (share_->GetCircuitType() == CircuitType::kBoolean) {
+    return shift_boolean_share(*this, amount, true);
+  }
+
+  if (share_->GetProtocol() == MpcProtocol::kArithmeticGmw) {
+    auto as_boolean = Convert<MpcProtocol::kBooleanGmw>();
+    auto shifted_boolean = shift_boolean_share(as_boolean, amount, true);
+    return shifted_boolean.Convert<MpcProtocol::kArithmeticGmw>();
+  }
+
+  throw std::runtime_error("ShiftLeft is implemented for Boolean shares and ArithmeticGMW shares");
+}
+
+ShareWrapper ShareWrapper::ShiftRight(std::size_t amount) const {
+  if (!share_) {
+    throw std::runtime_error("ShiftRight called on an empty ShareWrapper");
+  }
+
+  const auto bitlength = share_->GetBitLength();
+  if (bitlength == 0) {
+    throw std::runtime_error("ShiftRight called on a ShareWrapper with bitlength 0");
+  }
+
+  const auto shift_boolean_share = [bitlength](const ShareWrapper& boolean_share,
+                                               std::size_t shift_amount,
+                                               bool left_shift) {
+    auto split = boolean_share.Split();
+    assert(!split.empty());
+    auto zero_wire = split.at(0) ^ split.at(0);
+    std::vector<ShareWrapper> shifted(bitlength, zero_wire);
+
+    if (shift_amount < bitlength) {
+      if (left_shift) {
+        for (std::size_t i = shift_amount; i < bitlength; ++i) {
+          shifted.at(i) = split.at(i - shift_amount);
+        }
+      } else {
+        for (std::size_t i = 0; i + shift_amount < bitlength; ++i) {
+          shifted.at(i) = split.at(i + shift_amount);
+        }
+      }
+    }
+
+    return ShareWrapper::Concatenate(shifted);
+  };
+
+  if (share_->GetCircuitType() == CircuitType::kBoolean) {
+    return shift_boolean_share(*this, amount, false);
+  }
+
+  if (share_->GetProtocol() == MpcProtocol::kArithmeticGmw) {
+    auto as_boolean = Convert<MpcProtocol::kBooleanGmw>();
+    auto shifted_boolean = shift_boolean_share(as_boolean, amount, false);
+    return shifted_boolean.Convert<MpcProtocol::kArithmeticGmw>();
+  }
+
+  throw std::runtime_error("ShiftRight is implemented for Boolean shares and ArithmeticGMW shares");
+}
 ShareWrapper ShareWrapper::operator==(const ShareWrapper& other) const {
   if (other->GetBitLength() != share_->GetBitLength()) {
     share_->GetBackend().GetLogger()->LogError(
@@ -487,7 +578,7 @@ ShareWrapper ShareWrapper::Convert() const {
   constexpr auto kBooleanGmw = MpcProtocol::kBooleanGmw;
   constexpr auto kBmr = MpcProtocol::kBmr;
   if (share_->GetProtocol() == P) {
-    throw std::runtime_error("Trying to convert share to MpcProtocol it is already in");
+    return *this;
   }
 
   assert(share_->GetProtocol() < MpcProtocol::kInvalid);
@@ -1467,4 +1558,5 @@ ShareWrapper ShareWrapper::Simdify(std::span<SharePointer> input) {
 ShareWrapper ShareWrapper::Simdify(std::vector<ShareWrapper>&& input) { return Simdify(input); }
 
 }  // namespace encrypto::motion
+
 
