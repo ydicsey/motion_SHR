@@ -664,7 +664,7 @@ MuxGate::MuxGate(const motion::SharePointer& a, const motion::SharePointer& b,
 void MuxGate::EvaluateSetup() {}
 
 void MuxGate::EvaluateOnline() {
-  // nothing to setup, no need to wait/check
+  // wait for inputs and OT setup before invoking XCOT online APIs
   for (auto& wire : parent_a_) {
     wire->GetIsReadyCondition().Wait();
   }
@@ -705,6 +705,9 @@ void MuxGate::EvaluateOnline() {
   const auto& selection_bits = gmw_wire_selection_bits->GetValues();
   for (auto other_pid = 0ull; other_pid < number_of_parties; ++other_pid) {
     if (other_pid == my_id) continue;
+
+    ot_receiver_.at(other_pid)->WaitSetup();
+    ot_sender_.at(other_pid)->WaitSetup();
 
     ot_receiver_.at(other_pid)->SetChoices(selection_bits);
     ot_receiver_.at(other_pid)->SendCorrections();
