@@ -487,7 +487,8 @@ ShareWrapper ShareWrapper::Convert() const {
   constexpr auto kBooleanGmw = MpcProtocol::kBooleanGmw;
   constexpr auto kBmr = MpcProtocol::kBmr;
   if (share_->GetProtocol() == P) {
-    throw std::runtime_error("Trying to convert share to MpcProtocol it is already in");
+    // throw std::runtime_error("Trying to convert share to MpcProtocol it is already in");
+    return *this;
   }
 
   assert(share_->GetProtocol() < MpcProtocol::kInvalid);
