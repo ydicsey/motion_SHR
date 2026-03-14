@@ -89,6 +89,29 @@ Kk13OtProvider::Kk13OtProvider(Kk13OtExtensionData& data, BaseProvider& motion_b
   return receiver_provider_.RegisterGOtBit(number_of_ots, number_of_messages);
 }
 
+void Kk13OtProvider::Reset() {
+  receiver_provider_.Reset();
+  sender_provider_.Reset();
+
+  data_.sender_data.bit_size.store(0);
+  data_.sender_data.consumed_offset.store(0);
+  data_.sender_data.u = {};
+  data_.sender_data.V.reset();
+  data_.sender_data.y.clear();
+  data_.sender_data.bitlengths.clear();
+  data_.sender_data.ResetSetupIsReady();
+
+  data_.receiver_data.consumed_offset.store(0);
+  data_.receiver_data.T_0.reset();
+  data_.receiver_data.T_1.reset();
+  data_.receiver_data.outputs.clear();
+  data_.receiver_data.bitlengths.clear();
+  data_.receiver_data.random_choices.reset();
+  data_.receiver_data.ResetSetupIsReady();
+
+  data_.ResetSetupIsReady();
+}
+
 Kk13OtProviderFromKk13OtExtension::Kk13OtProviderFromKk13OtExtension(
     Kk13OtExtensionData& data, BaseOtProvider& base_ot_provider, BaseProvider& motion_base_provider)
     : Kk13OtProvider(data, motion_base_provider), base_ot_provider_(base_ot_provider) {

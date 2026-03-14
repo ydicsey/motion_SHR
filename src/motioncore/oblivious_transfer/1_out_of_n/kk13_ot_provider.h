@@ -210,10 +210,7 @@ class Kk13OtProvider : public FiberSetupWaitable {
     sender_provider_.Clear();
   }
 
-  void Reset() {
-    receiver_provider_.Reset();
-    sender_provider_.Reset();
-  }
+  void Reset();
 
   bool HasWork() { return (GetTotalNumOtsReceiver() > 0 || GetTotalNumOtsSender() > 0); }
 

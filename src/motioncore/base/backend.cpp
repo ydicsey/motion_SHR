@@ -191,52 +191,33 @@ const GatePointer& Backend::GetGate(std::size_t gate_id) const {
   return register_->GetGate(gate_id);
 }
 
-void Backend::Reset() { 
-  // base_ot_provider_->Reset();
-  // // motion_base_provider_->Reset();
-  // // fixed: Prg::Encrypt(std::size_t): Assertion `length > 0 && "assigning bytes to int should yield a positive value"' failed.
-  // ot_provider_manager_->Reset();
-  // kk13_ot_provider_manager_->Reset();
-  // mt_provider_->Reset();
-  // sp_provider_->Reset();
-  // sb_provider_->Reset();
-  // register_->Reset();
-  // // Reset BMR specific provider
-  // if (bmr_provider_) {
-  //   std::cout << "Resetting BMR provider..." << std::endl;
-  //   bmr_provider_->Reset(); // Assuming you implement this method
-  // }
-  base_ot_provider_.reset();
-  ot_provider_manager_.reset();
-  kk13_ot_provider_manager_.reset();
-  mt_provider_.reset();
-  sp_provider_.reset();
-  sb_provider_.reset();
-  register_->Reset();
-  bmr_provider_.reset();
-  base_ot_provider_ = std::make_unique<BaseOtProvider>(*communication_layer_);
-  auto my_id = communication_layer_->GetMyId();
-
-  ot_provider_manager_ = std::make_unique<OtProviderManager>(
-      *communication_layer_, *base_ot_provider_, *motion_base_provider_);
-
-  kk13_ot_provider_manager_ = std::make_unique<Kk13OtProviderManager>(
-      *communication_layer_, *base_ot_provider_, *motion_base_provider_);
-
-  mt_provider_ = std::make_shared<MtProviderFromOts>(ot_provider_manager_->GetProviders(), my_id,
-                                                     logger_, run_time_statistics_.back());
-  sp_provider_ = std::make_shared<SpProviderFromOts>(ot_provider_manager_->GetProviders(), my_id,
-                                                     logger_, run_time_statistics_.back());
-  sb_provider_ = std::make_shared<SbProviderFromSps>(*communication_layer_, sp_provider_, logger_,
-                                                     run_time_statistics_.back());
-  bmr_provider_ = std::make_unique<proto::bmr::Provider>(*communication_layer_);
-  if (communication_layer_->GetNumberOfParties() == 2) {
-    garbled_circuit_provider_ =
-        proto::garbled_circuit::Provider::MakeProvider(*communication_layer_);
+void Backend::Reset() {
+  if (ot_provider_manager_) {
+    ot_provider_manager_->Reset();
+  }
+  if (kk13_ot_provider_manager_) {
+    kk13_ot_provider_manager_->Reset();
+  }
+  if (mt_provider_) {
+    mt_provider_->Reset();
+  }
+  if (sb_provider_) {
+    sb_provider_->Reset();
+  } else if (sp_provider_) {
+    sp_provider_->Reset();
   }
 
-  // TODO should probably throw if it has been already started
-  communication_layer_->Start();
+  if (base_ot_provider_) {
+    base_ot_provider_->Reset();
+  }
+  if (motion_base_provider_) {
+    motion_base_provider_->Reset();
+  }
+  if (bmr_provider_) {
+    bmr_provider_->Reset();
+  }
+
+  register_->Reset();
 }
 
 void Backend::Clear() { register_->Clear(); }

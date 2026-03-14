@@ -346,14 +346,23 @@ void OtProviderFromOtExtension::PreSetup() {
 void OtProviderFromOtExtension::Reset() {
   sender_provider_.Reset();
   receiver_provider_.Reset();
+
+  data_.sender_data.bit_size.store(0);
+  data_.sender_data.consumed_offset.store(0);
+  data_.sender_data.V.reset();
   data_.sender_data.y0.clear();
   data_.sender_data.y1.clear();
   data_.sender_data.bitlengths.clear();
+
+  data_.receiver_data.consumed_offset.store(0);
+  data_.receiver_data.T.reset();
   data_.receiver_data.outputs.clear();
   data_.receiver_data.bitlengths.clear();
-  if (data_.receiver_data.random_choices) {
-    data_.receiver_data.random_choices->Clear();
-  }
+  data_.receiver_data.random_choices.reset();
+
+  data_.sender_data.ResetSetupIsReady();
+  data_.receiver_data.ResetSetupIsReady();
+
   // motion_base_provider_.Reset();
   ResetSetupIsReady();
   // ResetOnlineIsReady();
