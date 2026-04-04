@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 
@@ -35,7 +36,8 @@ class Register;
 // Evaluates all registered gates.
 class GateExecutor {
  public:
-  GateExecutor(Register&, std::function<void()> presetup_function, std::shared_ptr<Logger>);
+  GateExecutor(Register&, std::function<void()> presetup_function, std::shared_ptr<Logger>,
+               std::function<std::size_t()> get_number_of_threads);
 
   // Run the setup phases first for all gates before starting with the online
   // phases.
@@ -43,13 +45,20 @@ class GateExecutor {
   // Run setup and online phase of each gate as soon as possible.
   void Evaluate(RunTimeStatistics& statistics);
 
+  std::size_t GetWorkerThreadCountForTesting() const noexcept {
+    return GetNumberOfWorkerThreads();
+  }
+
  private:
+  std::size_t GetNumberOfWorkerThreads() const noexcept;
+
   Register& register_;
   // Presetup function is run prior to the setup function and is used to provide information about
   // objects that will be used in the setup phase, eg a multiplication triple registers an
   // oblivious transfer object and an OT provider registers base OT objects.
   std::function<void()> presetup_function_;
   std::shared_ptr<Logger> logger_;
+  std::function<std::size_t()> get_number_of_threads_;
 };
 
 }  // namespace encrypto::motion

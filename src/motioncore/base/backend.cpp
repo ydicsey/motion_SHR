@@ -75,7 +75,8 @@ Backend::Backend(std::unique_ptr<communication::CommunicationLayer> communicatio
       configuration_(configuration),
       register_(std::make_shared<Register>(logger_)),
       gate_executor_(std::make_unique<GateExecutor>(
-          *register_, [this] { RunPreprocessing(); }, logger_)) {
+          *register_, [this] { RunPreprocessing(); }, logger_,
+          [this] { return configuration_ ? configuration_->GetNumOfThreads() : 0; })) {
   motion_base_provider_ = std::make_unique<BaseProvider>(*communication_layer_);
   base_ot_provider_ = std::make_unique<BaseOtProvider>(*communication_layer_);
   communication_layer_->SetLogger(logger_);
@@ -186,6 +187,13 @@ void Backend::EvaluateSequential() {
 }
 
 void Backend::EvaluateParallel() { gate_executor_->Evaluate(run_time_statistics_.back()); }
+
+std::size_t Backend::GetGateExecutorWorkerThreadCountForTesting() const noexcept {
+  if (!gate_executor_) {
+    return 0;
+  }
+  return gate_executor_->GetWorkerThreadCountForTesting();
+}
 
 const GatePointer& Backend::GetGate(std::size_t gate_id) const {
   return register_->GetGate(gate_id);

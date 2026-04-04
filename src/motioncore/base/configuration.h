@@ -71,10 +71,10 @@ class Configuration {
   /// until proceeding to the online phase
   bool online_after_setup_ = false;
 
-  // determines how many worker threads are used in openmp, but not in
-  // communication handlers! the latter always use at least 2 threads for each
-  // communication channel to send and receive data to prevent the communication
-  // becoming a bottleneck, e.g., in 10 Gbps networks.
+  // determines how many worker threads are used in the gate evaluation fiber
+  // thread pool. if set to 0, std::thread::hardware_concurrency() is used.
+  // communication handlers are not affected and still use dedicated send/recv
+  // threads per communication channel.
   std::size_t number_of_threads_;
 };
 

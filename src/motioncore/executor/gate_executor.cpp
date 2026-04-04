@@ -22,6 +22,8 @@
 
 #include "gate_executor.h"
 
+#include <algorithm>
+
 #include "base/register.h"
 #include "protocols/gate.h"
 #include "statistics/run_time_statistics.h"
@@ -31,10 +33,20 @@
 namespace encrypto::motion {
 
 GateExecutor::GateExecutor(Register& reg, std::function<void(void)> presetup_function,
-                           std::shared_ptr<Logger> logger)
+                           std::shared_ptr<Logger> logger,
+                           std::function<std::size_t()> get_number_of_threads)
     : register_(reg),
       presetup_function_(std::move(presetup_function)),
-      logger_(std::move(logger)) {}
+      logger_(std::move(logger)),
+      get_number_of_threads_(std::move(get_number_of_threads)) {}
+
+std::size_t GateExecutor::GetNumberOfWorkerThreads() const noexcept {
+  const auto configured_number_of_threads = get_number_of_threads_ ? get_number_of_threads_() : 0;
+  if (configured_number_of_threads == 0) {
+    return 0;
+  }
+  return std::max<std::size_t>(2, configured_number_of_threads);
+}
 
 void GateExecutor::EvaluateSetupOnline(RunTimeStatistics& statistics) {
   statistics.RecordStart<RunTimeStatistics::StatisticsId::kEvaluate>();
@@ -46,9 +58,8 @@ void GateExecutor::EvaluateSetupOnline(RunTimeStatistics& statistics) {
         "Start evaluating the circuit gates sequentially (online after all finished setup)");
   }
 
-  // create a pool with std::thread::hardware_concurrency() no. of threads
-  // to execute fibers
-  FiberThreadPool fiber_pool(0, 2 * register_.GetTotalNumberOfGates());
+  // create a pool with configured number of threads (0 means hardware_concurrency())
+  FiberThreadPool fiber_pool(GetNumberOfWorkerThreads(), 2 * register_.GetTotalNumberOfGates());
 
   // ------------------------------ setup phase ------------------------------
   statistics.RecordStart<RunTimeStatistics::StatisticsId::kGatesSetup>();
@@ -112,9 +123,8 @@ void GateExecutor::Evaluate(RunTimeStatistics& statistics) {
   // Run preprocessing setup in a separate thread
   auto preprocessing_future = std::async(std::launch::async, [this] { presetup_function_(); });
 
-  // create a pool with std::thread::hardware_concurrency() no. of threads
-  // to execute fibers
-  FiberThreadPool fiber_pool(0, register_.GetTotalNumberOfGates());
+  // create a pool with configured number of threads (0 means hardware_concurrency())
+  FiberThreadPool fiber_pool(GetNumberOfWorkerThreads(), register_.GetTotalNumberOfGates());
 
   // Evaluate all the gates
   for (auto& gate : register_.GetGates()) {

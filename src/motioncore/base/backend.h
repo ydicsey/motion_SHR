@@ -254,6 +254,8 @@ class Backend : public std::enable_shared_from_this<Backend> {
 
   auto& GetMutableRunTimeStatistics() { return run_time_statistics_; }
 
+  std::size_t GetGateExecutorWorkerThreadCountForTesting() const noexcept;
+
  private:
   std::list<RunTimeStatistics> run_time_statistics_;
 
