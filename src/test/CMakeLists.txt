@@ -31,6 +31,7 @@ add_executable(motiontest
         test_sp.cpp
         test_subset_gate.cpp
         test_tcp_transport.cpp
+        test_thread_pool_configuration.cpp
         test_unsimdify_gate.cpp
         )
 
