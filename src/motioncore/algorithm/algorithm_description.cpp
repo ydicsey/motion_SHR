@@ -72,7 +72,6 @@ AlgorithmDescription AlgorithmDescription::FromBristol(std::ifstream& stream) {
   algorithm_description.constant_wires.assign(algorithm_description.number_of_wires,
                                               std::nullopt);
 
-  std::vector<std::string> line_vector;
   std::string line;
   std::getline(stream, line);  // skip \n at the end of the first line
   // second line
@@ -80,9 +79,13 @@ AlgorithmDescription AlgorithmDescription::FromBristol(std::ifstream& stream) {
     std::string second_line;
     std::getline(stream, second_line);
     std::stringstream ss(second_line);
-    while (std::getline(ss, line, ' ')) {
-      line_vector.emplace_back(std::move(line));
-      line.clear();
+    std::vector<std::string> line_vector;
+    std::string token;
+    while (std::getline(ss, token, ' ')) {
+      boost::algorithm::trim(token);
+      if (!token.empty()) {
+        line_vector.emplace_back(std::move(token));
+      }
     }
     algorithm_description.number_of_input_wires_parent_a = std::stoull(line_vector.at(0));
     if (line_vector.size() == 2) {
@@ -94,32 +97,22 @@ AlgorithmDescription AlgorithmDescription::FromBristol(std::ifstream& stream) {
       throw std::runtime_error(
           std::string("Unexpected number of values: " + std::to_string(line_vector.size()) + "\n"));
     }
-    line.clear();
-    line_vector.clear();
   }
 
-  std::getline(stream, line);
-  assert(line.empty());
 
-  // read line
-  const auto reverse_chunks = [](std::vector<long long>& ids, std::size_t chunk) {
-    if (chunk == 0 || ids.empty() || ids.size() % chunk != 0) return;
-    for (std::size_t offset = 0; offset < ids.size(); offset += chunk) {
-      std::reverse(ids.begin() + offset, ids.begin() + offset + chunk);
-    }
-  };
-
-  while (std::getline(stream, line)) {
-    std::stringstream ss(line);
-    // split line
-    while (std::getline(ss, line, ' ')) {
-      boost::algorithm::trim(line);
-      if (!line.empty()) {
-        line_vector.emplace_back(std::move(line));
+  const auto parse_gate_line = [&](const std::string& gate_line) {
+    std::vector<std::string> line_vector;
+    std::stringstream ss(gate_line);
+    std::string token;
+    while (std::getline(ss, token, ' ')) {
+      boost::algorithm::trim(token);
+      if (!token.empty()) {
+        line_vector.emplace_back(std::move(token));
       }
     }
 
-    if (line_vector.empty()) continue;
+    if (line_vector.empty()) return;
+
     std::string type = line_vector.at(line_vector.size() - 1);
     boost::algorithm::trim(type);
     PrimitiveOperation primitive_operation;
@@ -155,9 +148,21 @@ AlgorithmDescription AlgorithmDescription::FromBristol(std::ifstream& stream) {
       throw std::runtime_error("Unknown operation type: " + line_vector.at(line_vector.size() - 1) +
                                "\n");
     }
-    algorithm_description.gates.emplace_back(primitive_operation);
-    line.clear();
-    line_vector.clear();
+    algorithm_description.gates.emplace_back(std::move(primitive_operation));
+  };
+
+  // consume optional separator line between header and gates.
+  // Some Bristol files contain an empty/whitespace line here, others start gates directly.
+  if (std::getline(stream, line)) {
+    std::string maybe_separator = line;
+    boost::algorithm::trim(maybe_separator);
+    if (!maybe_separator.empty()) {
+      parse_gate_line(line);
+    }
+  }
+
+  while (std::getline(stream, line)) {
+    parse_gate_line(line);
   }
   // Default output ordering: last number_of_output_wires wires.
   for (std::size_t i = algorithm_description.number_of_wires -
@@ -238,20 +243,8 @@ AlgorithmDescription AlgorithmDescription::FromBristolFashion(std::ifstream& str
         "Cannot parse Bristol Fashion file at line 3 (maybe unsupported number of output values)");
   }
 
-  // consume empty line
-  std::getline(stream, line);
-  assert(line.empty());
-
-  std::size_t line_number = kGateEncodingLineNumber;
-
-  // read gates
-  while (std::getline(stream, line)) {
-    ++line_number;
-    if (line.empty() || std::regex_match(line, kLineWhitespaceRegex)) {
-      continue;
-    }
-
-    if (!std::regex_match(line, match, kLineGateRegex)) {
+  const auto parse_gate_line = [&](const std::string& gate_line, std::size_t line_number) {
+    if (!std::regex_match(gate_line, match, kLineGateRegex)) {
       throw std::runtime_error(
           fmt::format("Cannot parse Bristol Fashion file at line {}", line_number));
     }
@@ -289,8 +282,26 @@ AlgorithmDescription AlgorithmDescription::FromBristolFashion(std::ifstream& str
       primitive_operation.parent_b = boost::lexical_cast<std::size_t>(input_b);
     }
     algorithm_description.gates.emplace_back(std::move(primitive_operation));
+  };
+
+  // consume optional separator line between header and gates.
+  // Some Bristol Fashion files contain an empty/whitespace line here, others start gates directly.
+  std::size_t line_number = kGateEncodingLineNumber;
+  if (std::getline(stream, line)) {
+    if (!std::regex_match(line, kLineWhitespaceRegex)) {
+      parse_gate_line(line, line_number);
+    }
   }
 
+  // read remaining gates
+  while (std::getline(stream, line)) {
+    ++line_number;
+    if (std::regex_match(line, kLineWhitespaceRegex)) {
+      continue;
+    }
+
+    parse_gate_line(line, line_number);
+  }
   algorithm_description.constant_wires.assign(algorithm_description.number_of_wires,
                                               std::nullopt);
   // Default output ordering: last number_of_output_wires wires.
@@ -492,8 +503,4 @@ AlgorithmDescription AlgorithmDescription::FromAby(std::ifstream& stream) {
 }
 
 }  // namespace encrypto::motion
-
-
-
-
 
