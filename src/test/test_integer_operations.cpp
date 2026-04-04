@@ -612,10 +612,7 @@ TYPED_TEST(SecureUintTest, ShiftInGmw) {
       kNumberOfWires, encrypto::motion::BitVector<>(kNumberOfSimd, false));
 
   std::vector<PartyPointer> motion_parties(std::move(MakeLocallyConnectedParties(2, kPortOffset)));
-  for (auto& party : motion_parties) {
-    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
-    party->GetConfiguration()->SetOnlineAfterSetup(true);
-  }
+  ConfigurePartiesForPerformance(motion_parties);
 
   std::vector<std::thread> threads;
   for (auto party_id = 0u; party_id < motion_parties.size(); ++party_id) {
@@ -1571,10 +1568,7 @@ TYPED_TEST(SecureUintTest, ShiftInArithmeticGmw) {
   const T input = random(), dummy_input = random();
 
   std::vector<PartyPointer> parties(std::move(MakeLocallyConnectedParties(2, kPortOffset)));
-  for (auto& party : parties) {
-    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
-    party->GetConfiguration()->SetOnlineAfterSetup(true);
-  }
+  ConfigurePartiesForPerformance(parties);
 
   std::vector<std::thread> threads;
   for (auto party_id = 0u; party_id < parties.size(); ++party_id) {

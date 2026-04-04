@@ -30,3 +30,11 @@ constexpr auto kTestIterations = 1u;  // increase if needed
 constexpr auto kDetailedLoggingEnabled = false;
 constexpr auto kPortOffset = 17777u;
 constexpr auto kNumberOfPartiesList = {2u, 3u, 4u, 5u, 10u};
+
+template <typename PartyContainer>
+inline void ConfigurePartiesForPerformance(PartyContainer& parties) {
+  for (auto& party : parties) {
+    party->GetLogger()->SetEnabled(false);
+    party->GetConfiguration()->SetOnlineAfterSetup(true);
+  }
+}

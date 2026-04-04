@@ -245,8 +245,15 @@ std::vector<encrypto::motion::BitVector<>> EvaluateBinaryAbyCircuitAndOpenToPart
       if (party_id == 0) {
         opened_output = outputs.at(party_id).As<std::vector<encrypto::motion::BitVector<>>>();
       }
-      party->Finish();
+      party->Reset();
     }));
+  }
+  for (auto& future : futures) future.get();
+
+  futures.clear();
+  futures.reserve(number_of_parties);
+  for (auto& party : parties) {
+    futures.emplace_back(std::async(std::launch::async, [&party] { party->Finish(); }));
   }
   for (auto& future : futures) future.get();
 
@@ -293,8 +300,15 @@ std::vector<encrypto::motion::BitVector<>> EvaluateUnaryAbyCircuitAndOpenToParty
       if (party_id == 0) {
         opened_output = outputs.at(party_id).As<std::vector<encrypto::motion::BitVector<>>>();
       }
-      party->Finish();
+      party->Reset();
     }));
+  }
+  for (auto& future : futures) future.get();
+
+  futures.clear();
+  futures.reserve(number_of_parties);
+  for (auto& party : parties) {
+    futures.emplace_back(std::async(std::launch::async, [&party] { party->Finish(); }));
   }
   for (auto& future : futures) future.get();
 
@@ -339,7 +353,8 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
     throw std::invalid_argument("Need at least two parties for i2f+float-add evaluation");
   }
 
-  constexpr auto kProtocol = encrypto::motion::MpcProtocol::kBooleanGmw;
+  constexpr auto kBooleanProtocol = encrypto::motion::MpcProtocol::kBooleanGmw;
+  constexpr auto kArithmeticProtocol = encrypto::motion::MpcProtocol::kArithmeticGmw;
   const auto root = std::string(encrypto::motion::kRootDir);
 
   const auto i2f_algorithm = encrypto::motion::AlgorithmDescription::FromBristolFashion(
@@ -347,10 +362,7 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
   const auto float_add_algorithm = encrypto::motion::AlgorithmDescription::FromAby(
       root + "/circuits/aby/float/fp_nostatus_add_64.aby");
 
-  const auto int_input = encrypto::motion::ToInput(static_cast<std::uint64_t>(int_value));
   const auto float_input = encrypto::motion::ToInput(std::bit_cast<std::uint64_t>(float_value));
-  const std::vector<encrypto::motion::BitVector<>> zeros_int(int_input.size(),
-                                                              encrypto::motion::BitVector<>(1, false));
   const std::vector<encrypto::motion::BitVector<>> zeros_float(
       float_input.size(), encrypto::motion::BitVector<>(1, false));
 
@@ -363,14 +375,16 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
   std::vector<encrypto::motion::ShareWrapper> outputs(number_of_parties);
   for (std::size_t party_id = 0; party_id < number_of_parties; ++party_id) {
     auto& party = parties.at(party_id);
-    auto local_int = (party_id == 0) ? int_input : zeros_int;
+    const std::int64_t local_int_value = (party_id == 0) ? int_value : 0;
     auto local_float = (party_id == 1) ? float_input : zeros_float;
 
-    const encrypto::motion::ShareWrapper int_share(party->In<kProtocol>(std::move(local_int), 0));
+    const encrypto::motion::ShareWrapper int_share_arithmetic(
+        party->In<kArithmeticProtocol>(local_int_value, 0));
+    const auto int_share_boolean = int_share_arithmetic.Convert<kBooleanProtocol>();
     const encrypto::motion::ShareWrapper float_share(
-        party->In<kProtocol>(std::move(local_float), 1));
+        party->In<kBooleanProtocol>(std::move(local_float), 1));
 
-    const auto int_as_float = int_share.Evaluate(i2f_algorithm);
+    const auto int_as_float = int_share_boolean.Evaluate(i2f_algorithm);
     const auto concatenated = encrypto::motion::ShareWrapper::Concatenate(
         std::vector<encrypto::motion::ShareWrapper>{int_as_float, float_share});
     outputs.at(party_id) = concatenated.Evaluate(float_add_algorithm).Out(0);
@@ -386,8 +400,15 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
       if (party_id == 0) {
         opened_output = outputs.at(party_id).As<std::vector<encrypto::motion::BitVector<>>>();
       }
-      party->Finish();
+      party->Reset();
     }));
+  }
+  for (auto& future : futures) future.get();
+
+  futures.clear();
+  futures.reserve(number_of_parties);
+  for (auto& party : parties) {
+    futures.emplace_back(std::async(std::launch::async, [&party] { party->Finish(); }));
   }
   for (auto& future : futures) future.get();
 
@@ -396,7 +417,6 @@ std::uint64_t EvaluateI2fThenAbyAdd64AndOpenToParty0(std::int64_t int_value, dou
   }
   return encrypto::motion::ToOutput<std::uint64_t>(opened_output);
 }
-
 TEST(FloatMpc64, FromAbyCmp64_2_3_4_5_10_parties) {
   const auto trial_count = GetFloatRandomTrialCount();
 
@@ -539,8 +559,4 @@ TEST(FloatMpc64, FromAbyDiv64_2_3_4_5_10_parties) {
 }
 
 }  // namespace
-
-
-
-
 
