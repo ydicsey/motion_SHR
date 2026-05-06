@@ -22,19 +22,30 @@
 
 #include "run_time_statistics.h"
 #include <fmt/format.h>
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <string>
 
 namespace encrypto::motion {
 
-static double ToMilliseconds(const RunTimeStatistics::TimePointPair& tpp) {
-  std::chrono::duration<double, std::milli> milliseconds = tpp.second - tpp.first;
+static double ToMilliseconds(const RunTimeStatistics::Duration& duration) {
+  std::chrono::duration<double, std::milli> milliseconds = duration;
   return milliseconds.count();
 }
 
 const RunTimeStatistics::TimePointPair& RunTimeStatistics::Get(StatisticsId id) const {
   return data.at(static_cast<std::size_t>(id));
+}
+
+RunTimeStatistics::Duration RunTimeStatistics::GetDuration(StatisticsId id) const {
+  const auto idx = static_cast<std::size_t>(id);
+  return data.at(idx).second - data.at(idx).first + accumulated_durations.at(idx);
+}
+
+void RunTimeStatistics::Reset() {
+  data = {};
+  accumulated_durations = {};
 }
 
 template <typename C>
@@ -44,9 +55,11 @@ typename C::value_type At(const C& container, RunTimeStatistics::StatisticsId id
 
 std::string RunTimeStatistics::PrintHumanReadable() const {
   std::array<double, std::tuple_size_v<decltype(data)>> milliseconds;
-  std::transform(data.cbegin(), data.cend(), milliseconds.begin(), ToMilliseconds);
+  for (std::size_t i = 0; i < milliseconds.size(); ++i) {
+    milliseconds.at(i) = ToMilliseconds(GetDuration(static_cast<StatisticsId>(i)));
+  }
   auto max = *std::max_element(milliseconds.cbegin(), milliseconds.cend());
-  auto width = static_cast<std::size_t>(std::ceil(std::log10(max))) + 4;
+  auto width = max > 0.0 ? static_cast<std::size_t>(std::ceil(std::log10(max))) + 4 : 5;
 
   std::stringstream ss;
   ss << fmt::format("MT Presetup         {:{}.3f} ms\n",
@@ -74,6 +87,8 @@ std::string RunTimeStatistics::PrintHumanReadable() const {
                     At(milliseconds, StatisticsId::kGatesSetup), width)
      << fmt::format("Gates Online        {:{}.3f} ms\n",
                     At(milliseconds, StatisticsId::kGatesOnline), width)
+     << fmt::format("Synchronization     {:{}.3f} ms\n",
+                    At(milliseconds, StatisticsId::kSynchronize), width)
      << fmt::format("-------------------------\n")
      << fmt::format("Circuit Evaluation  {:{}.3f} ms\n", At(milliseconds, StatisticsId::kEvaluate),
                     width);

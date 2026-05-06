@@ -34,16 +34,17 @@
 
 namespace encrypto::motion {
 
-static double ComputeDuration(const RunTimeStatistics::TimePointPair& tpp) {
+static double ComputeDuration(const RunTimeStatistics::Duration& duration) {
   std::chrono::duration<double, AccumulatedRunTimeStatistics::Resolution> d =
-      tpp.second - tpp.first;
+      duration;
   return d.count();
 }
 
 void AccumulatedRunTimeStatistics::Add(const RunTimeStatistics& statistics) {
   for (std::size_t i = 0; i <= static_cast<std::size_t>(RunTimeStatistics::StatisticsId::kMax);
        ++i) {
-    accumulators_[i](ComputeDuration(statistics.data[i]));
+    accumulators_[i](
+        ComputeDuration(statistics.GetDuration(static_cast<RunTimeStatistics::StatisticsId>(i))));
   }
   ++count_;
 }
@@ -96,6 +97,7 @@ std::string AccumulatedRunTimeStatistics::PrintHumanReadable() const {
                    kFieldWidth)
      << FormatLine("Gates Setup", unit, At(accumulators_, StatId::kGatesSetup), kFieldWidth)
      << FormatLine("Gates Online", unit, At(accumulators_, StatId::kGatesOnline), kFieldWidth)
+     << FormatLine("Synchronization", unit, At(accumulators_, StatId::kSynchronize), kFieldWidth)
      << "---------------------------------------------------------------------------\n"
      << FormatLine("Circuit Evaluation", unit, At(accumulators_, StatId::kEvaluate), kFieldWidth);
 
@@ -124,6 +126,7 @@ boost::json::object AccumulatedRunTimeStatistics::ToJson() const {
           {"preprocessing", make_triple(StatId::kPreprocessing)},
           {"gates_setup", make_triple(StatId::kGatesSetup)},
           {"gates_online", make_triple(StatId::kGatesOnline)},
+          {"synchronization", make_triple(StatId::kSynchronize)},
           {"evaluate", make_triple(StatId::kEvaluate)}};
 }
 

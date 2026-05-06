@@ -44,6 +44,17 @@ using boost::asio::ip::tcp;
 
 namespace encrypto::motion::communication {
 
+namespace {
+
+using Clock = std::chrono::steady_clock;
+
+std::uint64_t ToNanoseconds(Clock::duration duration) {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count());
+}
+
+}  // namespace
+
 namespace detail {
 
 struct TcpTransportImplementation {
@@ -96,6 +107,7 @@ void TcpTransport::SendMessage(std::span<const std::uint8_t> message) {
                                          std::numeric_limits<std::uint32_t>::max(),
                                          message.size()));
   }
+  const auto send_start = Clock::now();
   std::array<std::uint8_t, sizeof(std::uint32_t)> message_size;
   u32tou8(message.size(), message_size.data());
 
@@ -110,6 +122,7 @@ void TcpTransport::SendMessage(std::span<const std::uint8_t> message) {
   }
   statistics_.number_of_bytes_sent += message.size() + sizeof(uint32_t);
   statistics_.number_of_messages_sent += 1;
+  statistics_.send_time_ns += ToNanoseconds(Clock::now() - send_start);
 }
 
 static std::uint32_t u8tou32(std::array<std::uint8_t, sizeof(std::uint32_t)>& v) {
@@ -121,16 +134,21 @@ static std::uint32_t u8tou32(std::array<std::uint8_t, sizeof(std::uint32_t)>& v)
 }
 
 std::optional<std::vector<std::uint8_t>> TcpTransport::ReceiveMessage() {
+  const auto receive_start = Clock::now();
   std::array<std::uint8_t, sizeof(std::uint32_t)> message_size_buffer;
   boost::system::error_code ec;
   std::shared_lock lock(implementation_->socket_mutex_);
+  auto stage_start = Clock::now();
   implementation_->socket_.wait(tcp::socket::wait_read, ec);
+  statistics_.receive_wait_time_ns += ToNanoseconds(Clock::now() - stage_start);
   if (ec) {
     throw std::runtime_error(
         fmt::format("Error while wait read on socket: {} ({})", ec.message(), ec.value()));
   }
+  stage_start = Clock::now();
   boost::asio::read(implementation_->socket_, boost::asio::buffer(message_size_buffer),
                     boost::asio::transfer_exactly(message_size_buffer.size()), ec);
+  statistics_.receive_message_size_time_ns += ToNanoseconds(Clock::now() - stage_start);
   if (ec) {
     if (ec.value() == boost::asio::error::misc_errors::eof) {
       // connection has been closed
@@ -141,14 +159,17 @@ std::optional<std::vector<std::uint8_t>> TcpTransport::ReceiveMessage() {
   }
   std::uint32_t message_size = u8tou32(message_size_buffer);
   std::vector<std::uint8_t> message_buffer(message_size);
+  stage_start = Clock::now();
   boost::asio::read(implementation_->socket_, boost::asio::buffer(message_buffer),
                     boost::asio::transfer_exactly(message_buffer.size()), ec);
+  statistics_.receive_payload_time_ns += ToNanoseconds(Clock::now() - stage_start);
   if (ec) {
     throw std::runtime_error(
         fmt::format("Error while reading message size socket: {} ({})", ec.message(), ec.value()));
   }
   statistics_.number_of_bytes_received += message_size + sizeof(uint32_t);
   statistics_.number_of_messages_received += 1;
+  statistics_.receive_time_ns += ToNanoseconds(Clock::now() - receive_start);
   return message_buffer;
 }
 

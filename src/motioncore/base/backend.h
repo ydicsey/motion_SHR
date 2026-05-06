@@ -120,6 +120,8 @@ class Backend : public std::enable_shared_from_this<Backend> {
 
   void RunPreprocessing();
 
+  void ResetRunTimeStatistics();
+
   void EvaluateSequential();
 
   void EvaluateParallel();

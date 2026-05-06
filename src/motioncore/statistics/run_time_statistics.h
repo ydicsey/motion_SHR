@@ -33,6 +33,7 @@ struct RunTimeStatistics {
   using ClockType = std::chrono::steady_clock;
   using TimePoint = std::chrono::time_point<ClockType>;
   using TimePointPair = std::pair<TimePoint, TimePoint>;
+  using Duration = ClockType::duration;
 
   enum class StatisticsId : std::size_t {
     kMtPresetup,
@@ -48,6 +49,7 @@ struct RunTimeStatistics {
     kGatesOnline,
     kEvaluate,
     kBaseOts,
+    kSynchronize,
     kMax  // maximal value of this Enum, use as size
   };
 
@@ -65,11 +67,21 @@ struct RunTimeStatistics {
     // data.at(static_cast<std::size_t>(Id)).second = ClockType::now();
   }
 
+  template <StatisticsId Id>
+  void AddDuration(Duration duration) {
+    accumulated_durations[static_cast<std::size_t>(Id)] += duration;
+  }
+
   const TimePointPair& Get(StatisticsId id) const;
+
+  Duration GetDuration(StatisticsId id) const;
+
+  void Reset();
 
   std::string PrintHumanReadable() const;
 
-  std::array<TimePointPair, static_cast<std::size_t>(StatisticsId::kMax) + 1> data;
+  std::array<TimePointPair, static_cast<std::size_t>(StatisticsId::kMax) + 1> data{};
+  std::array<Duration, static_cast<std::size_t>(StatisticsId::kMax) + 1> accumulated_durations{};
 };
 
 }  // namespace encrypto::motion

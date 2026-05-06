@@ -36,6 +36,11 @@ struct TransportStatistics {
   std::size_t number_of_messages_received = 0;
   std::size_t number_of_bytes_sent = 0;
   std::size_t number_of_bytes_received = 0;
+  std::uint64_t send_time_ns = 0;
+  std::uint64_t receive_time_ns = 0;
+  std::uint64_t receive_wait_time_ns = 0;
+  std::uint64_t receive_message_size_time_ns = 0;
+  std::uint64_t receive_payload_time_ns = 0;
 };
 
 // underlying transport between two parties

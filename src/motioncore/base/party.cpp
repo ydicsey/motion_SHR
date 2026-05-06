@@ -100,6 +100,7 @@ void Party::Run(std::size_t repetitions) {
     return;
   }
 
+  backend_->ResetRunTimeStatistics();
   backend_->Synchronize();
   for (auto i = 0ull; i < repetitions; ++i) {
     if (i > 0u) {

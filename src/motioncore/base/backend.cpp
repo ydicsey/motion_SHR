@@ -152,7 +152,7 @@ void Backend::RunPreprocessing() {
     base_ot_provider_->PreSetup();
   }
 
-  communication_layer_->Synchronize();
+  Synchronize();
 
   if (base_ot_provider_->HasWork()) {
     logger_->LogInfo("Computing Base OTs");
@@ -187,6 +187,8 @@ void Backend::EvaluateSequential() {
 }
 
 void Backend::EvaluateParallel() { gate_executor_->Evaluate(run_time_statistics_.back()); }
+
+void Backend::ResetRunTimeStatistics() { run_time_statistics_.back().Reset(); }
 
 std::size_t Backend::GetGateExecutorWorkerThreadCountForTesting() const noexcept {
   if (!gate_executor_) {
@@ -483,7 +485,12 @@ SharePointer Backend::GarbledCircuitOutput(const SharePointer& parent, std::size
   return output_gate->GetOutputAsConstantShare();
 }
 
-void Backend::Synchronize() { communication_layer_->Synchronize(); }
+void Backend::Synchronize() {
+  const auto start = RunTimeStatistics::ClockType::now();
+  communication_layer_->Synchronize();
+  run_time_statistics_.back().AddDuration<RunTimeStatistics::StatisticsId::kSynchronize>(
+      RunTimeStatistics::ClockType::now() - start);
+}
 
 void Backend::ComputeBaseOts() {
   run_time_statistics_.back().RecordStart<RunTimeStatistics::StatisticsId::kBaseOts>();
