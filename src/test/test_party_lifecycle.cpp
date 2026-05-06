@@ -13,13 +13,16 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "algorithm/algorithm_description.h"
 #include "base/party.h"
+#include "communication/message_manager.h"
 #include "communication/transport.h"
 #include "protocols/share_wrapper.h"
 #include "statistics/analysis.h"
+#include "statistics/run_time_statistics.h"
 #include "test_constants.h"
 #include "utility/bit_vector.h"
 #include "utility/config.h"
@@ -37,6 +40,7 @@ constexpr std::array<std::size_t, 4> kDefaultAesPartyCounts = {2, 3, 5, 10};
 constexpr std::size_t kAesRounds = 10;
 constexpr std::size_t kAesSimd = 1;
 constexpr std::size_t kDefaultAesTrials = 2;
+constexpr std::size_t kDefaultAesWarmupTrials = 1;
 
 struct LifecycleBenchmarkResult {
   // Comparable total requested by the benchmark: sum of selected stage times.
@@ -102,6 +106,20 @@ std::size_t GetAesTrials() {
   return kDefaultAesTrials;
 }
 
+std::size_t GetAesWarmupTrials() {
+  if (const auto* env = std::getenv("MOTION_AES_WARMUP_TRIALS"); env != nullptr) {
+    const auto parsed = ParsePositiveIntegers(env);
+    if (!parsed.empty()) {
+      return parsed.front();
+    }
+  }
+  return kDefaultAesWarmupTrials;
+}
+
+bool PrintRoundDiagnostics() {
+  return std::getenv("MOTION_AES_PRINT_ROUND_STATS") != nullptr;
+}
+
 double Median(std::vector<double> values) {
   if (values.empty()) {
     return 0.0;
@@ -123,6 +141,46 @@ std::vector<double> CollectField(const std::vector<LifecycleBenchmarkResult>& re
     values.push_back(result.*field);
   }
   return values;
+}
+
+std::size_t CountRegisteredMessagePromises(std::vector<std::unique_ptr<Party>>& parties) {
+  std::size_t count = 0;
+  for (auto& party : parties) {
+    for (const auto& peer_promises :
+         party->GetBackend()->GetCommunicationLayer().GetMessageManager().GetMessagePromises()) {
+      for (const auto& [message_type, promises_by_id] : peer_promises) {
+        (void)message_type;
+        count += promises_by_id.size();
+      }
+    }
+  }
+  return count;
+}
+
+double MeanRunTimeStatistic(
+    std::vector<std::unique_ptr<Party>>& parties,
+    encrypto::motion::RunTimeStatistics::StatisticsId statistics_id) {
+  double sum = 0.0;
+  for (auto& party : parties) {
+    const auto& runs = party->GetBackend()->GetRunTimeStatistics();
+    if (!runs.empty()) {
+      sum += ToMilliseconds(runs.back().GetDuration(statistics_id));
+    }
+  }
+  return parties.empty() ? 0.0 : sum / static_cast<double>(parties.size());
+}
+
+void PrintLifecycleRoundDiagnostics(std::string_view label, std::size_t round,
+                                    std::vector<std::unique_ptr<Party>>& parties) {
+  using StatId = encrypto::motion::RunTimeStatistics::StatisticsId;
+  if (!PrintRoundDiagnostics()) {
+    return;
+  }
+  std::cout << "AES128 round diagnostics " << label << ": round=" << round
+            << ", gates_online_mean_ms=" << MeanRunTimeStatistic(parties, StatId::kGatesOnline)
+            << ", sync_mean_ms=" << MeanRunTimeStatistic(parties, StatId::kSynchronize)
+            << ", registered_message_promises=" << CountRegisteredMessagePromises(parties)
+            << "\n";
 }
 
 std::string CreateLfNormalizedAes128CircuitCopy() {
@@ -224,10 +282,21 @@ void CollectCommunicationStatisticsFromNestedVector(
   }
 }
 
-void RunAes128RoundAndCollectRunTime(
-    std::vector<std::unique_ptr<Party>>& parties, std::size_t round,
+void CollectRunTimeStatisticsFromParties(
+    const std::vector<std::unique_ptr<Party>>& parties,
     AccumulatedRunTimeStatistics& run_time_statistics,
     AccumulatedRunTimeStatistics* accumulated_run_time_statistics = nullptr) {
+  for (auto& party : parties) {
+    const auto& runs = party->GetBackend()->GetRunTimeStatistics();
+    ASSERT_FALSE(runs.empty());
+    run_time_statistics.Add(runs.back());
+    if (accumulated_run_time_statistics != nullptr) {
+      accumulated_run_time_statistics->Add(runs.back());
+    }
+  }
+}
+
+void RunAes128Round(std::vector<std::unique_ptr<Party>>& parties, std::size_t round) {
   std::vector<encrypto::motion::ShareWrapper> outputs(parties.size());
   for (std::size_t party_id = 0; party_id < parties.size(); ++party_id) {
     std::vector<BitVector<>> local_input(256, BitVector<>(kAesSimd, false));
@@ -260,15 +329,6 @@ void RunAes128RoundAndCollectRunTime(
   }
 
   ASSERT_EQ(opened_output.size(), 128u);
-
-  for (auto& party : parties) {
-    const auto& runs = party->GetBackend()->GetRunTimeStatistics();
-    ASSERT_FALSE(runs.empty());
-    run_time_statistics.Add(runs.back());
-    if (accumulated_run_time_statistics != nullptr) {
-      accumulated_run_time_statistics->Add(runs.back());
-    }
-  }
 }
 
 LifecycleBenchmarkResult BenchmarkAes128UsingReset(
@@ -288,13 +348,16 @@ LifecycleBenchmarkResult BenchmarkAes128UsingReset(
 
   for (std::size_t round = 0; round < kAesRounds; ++round) {
     stage_start = std::chrono::steady_clock::now();
-    RunAes128RoundAndCollectRunTime(parties, round, result.run_time_statistics,
-                                    accumulated_run_time_statistics);
+    RunAes128Round(parties, round);
     result.round_run_ms += ToMilliseconds(std::chrono::steady_clock::now() - stage_start);
 
     stage_start = std::chrono::steady_clock::now();
     ResetAllParties(parties);
     result.reset_ms += ToMilliseconds(std::chrono::steady_clock::now() - stage_start);
+
+    CollectRunTimeStatisticsFromParties(parties, result.run_time_statistics,
+                                        accumulated_run_time_statistics);
+    PrintLifecycleRoundDiagnostics("reset", round, parties);
   }
 
   std::vector<std::vector<encrypto::motion::communication::TransportStatistics>>
@@ -338,14 +401,16 @@ LifecycleBenchmarkResult BenchmarkAes128UsingFinish(
     result.configure_ms += ToMilliseconds(std::chrono::steady_clock::now() - stage_start);
 
     stage_start = std::chrono::steady_clock::now();
-    RunAes128RoundAndCollectRunTime(parties, round, result.run_time_statistics,
-                                    accumulated_run_time_statistics);
+    RunAes128Round(parties, round);
     result.round_run_ms += ToMilliseconds(std::chrono::steady_clock::now() - stage_start);
 
     stage_start = std::chrono::steady_clock::now();
     FinishAllParties(parties);
     result.finish_ms += ToMilliseconds(std::chrono::steady_clock::now() - stage_start);
 
+    CollectRunTimeStatisticsFromParties(parties, result.run_time_statistics,
+                                        accumulated_run_time_statistics);
+    PrintLifecycleRoundDiagnostics("finish", round, parties);
     AccumulateRoundTransportStatistics(total_transport_statistics, parties);
   }
 
@@ -361,6 +426,7 @@ LifecycleBenchmarkResult BenchmarkAes128UsingFinish(
 TEST(Aes128ResetFinish, Aes128ResetVsFinishTotalTime_10Rounds_2_3_5_10Parties) {
   const auto party_counts = GetAesPartyCounts();
   const auto trial_count = GetAesTrials();
+  const auto warmup_trial_count = GetAesWarmupTrials();
 
   ASSERT_GT(trial_count, 0u);
 
@@ -374,6 +440,16 @@ TEST(Aes128ResetFinish, Aes128ResetVsFinishTotalTime_10Rounds_2_3_5_10Parties) {
     AccumulatedRunTimeStatistics finish_accumulated_run_time_statistics;
     AccumulatedCommunicationStatistics reset_accumulated_communication_statistics;
     AccumulatedCommunicationStatistics finish_accumulated_communication_statistics;
+
+    for (std::size_t warmup_trial = 0; warmup_trial < warmup_trial_count; ++warmup_trial) {
+      if ((warmup_trial % 2) == 0) {
+        (void)BenchmarkAes128UsingReset(number_of_parties);
+        (void)BenchmarkAes128UsingFinish(number_of_parties);
+      } else {
+        (void)BenchmarkAes128UsingFinish(number_of_parties);
+        (void)BenchmarkAes128UsingReset(number_of_parties);
+      }
+    }
 
     for (std::size_t trial = 0; trial < trial_count; ++trial) {
       const auto run_reset = [&] {
@@ -398,10 +474,14 @@ TEST(Aes128ResetFinish, Aes128ResetVsFinishTotalTime_10Rounds_2_3_5_10Parties) {
 
     const auto reset_name = "AES128 Create+Configure+(Run+Reset)x10 (" + std::to_string(number_of_parties) +
                             " parties, " + std::to_string(kAesRounds) +
-                            " rounds, " + std::to_string(trial_count) + " trials, interleaved)";
-    const auto finish_name = "AES128 Create+Configure+Run+Finish (" + std::to_string(number_of_parties) +
-                             " parties, " + std::to_string(kAesRounds) +
-                             " rounds, " + std::to_string(trial_count) + " trials, interleaved)";
+                            " rounds, " + std::to_string(trial_count) +
+                            " measured trials, " + std::to_string(warmup_trial_count) +
+                            " warmup trials excluded, interleaved)";
+    const auto finish_name =
+        "AES128 Create+Configure+(Run+Finish)x10 fresh parties each round (" +
+        std::to_string(number_of_parties) + " parties, " + std::to_string(kAesRounds) +
+        " rounds, " + std::to_string(trial_count) + " measured trials, " +
+        std::to_string(warmup_trial_count) + " warmup trials excluded, interleaved)";
 
     std::cout << PrintStatistics(reset_name, reset_accumulated_run_time_statistics,
                                  reset_accumulated_communication_statistics);
