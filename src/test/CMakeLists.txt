@@ -13,6 +13,7 @@ add_executable(motiontest
         test_conversions.cpp
         test_dummy_transport.cpp
         test_float.cpp
+        test_fromaby_primitive_performance.cpp
         test_garbled_circuit.cpp
         test_integer_operations.cpp
         test_kk13_ot.cpp
@@ -29,6 +30,7 @@ add_executable(motiontest
         test_sb.cpp
         test_simdify_gate.cpp
         test_sp.cpp
+        test_statistics.cpp
         test_subset_gate.cpp
         test_tcp_transport.cpp
         test_thread_pool_configuration.cpp

@@ -27,10 +27,7 @@ namespace encrypto::motion::communication {
 const TransportStatistics& Transport::GetStatistics() const { return statistics_; }
 
 void Transport::ResetStatistics() {
-  statistics_.number_of_messages_sent = 0;
-  statistics_.number_of_messages_received = 0;
-  statistics_.number_of_bytes_sent = 0;
-  statistics_.number_of_bytes_received = 0;
+  statistics_ = TransportStatistics{};
 }
 
 }  // namespace encrypto::motion::communication

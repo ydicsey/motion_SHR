@@ -22,6 +22,7 @@
 
 #include "analysis.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -43,8 +44,10 @@ static double ComputeDuration(const RunTimeStatistics::Duration& duration) {
 void AccumulatedRunTimeStatistics::Add(const RunTimeStatistics& statistics) {
   for (std::size_t i = 0; i <= static_cast<std::size_t>(RunTimeStatistics::StatisticsId::kMax);
        ++i) {
-    accumulators_[i](
-        ComputeDuration(statistics.GetDuration(static_cast<RunTimeStatistics::StatisticsId>(i))));
+    const auto duration =
+        ComputeDuration(statistics.GetDuration(static_cast<RunTimeStatistics::StatisticsId>(i)));
+    accumulators_[i](duration);
+    samples_[i].push_back(duration);
   }
   ++count_;
 }
@@ -56,13 +59,26 @@ static typename C::value_type At(const C& container, RunTimeStatistics::Statisti
 
 using StatId = RunTimeStatistics::StatisticsId;
 
+static double ExactMedian(std::vector<double> samples) {
+  if (samples.empty()) {
+    return 0.0;
+  }
+  std::sort(samples.begin(), samples.end());
+  const auto middle = samples.size() / 2;
+  if ((samples.size() % 2) == 1) {
+    return samples.at(middle);
+  }
+  return 0.5 * (samples.at(middle - 1) + samples.at(middle));
+}
+
 static std::string FormatLine(std::string name, std::string unit,
                               AccumulatedRunTimeStatistics::AccumulatorType accumulator,
+                              const std::vector<double>& samples,
                               std::size_t field_width) {
   std::stringstream ss;
   ss << fmt::format("{:19s} ", name);
   ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::mean(accumulator), field_width, unit);
-  ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::median(accumulator), field_width, unit);
+  ss << fmt::format("{:{}.3f} {:s} ", ExactMedian(samples), field_width, unit);
   ss << fmt::format("{:{}.3f} {:s} ", boost::accumulators::sum(accumulator), field_width, unit);
   // uncorrected standard deviation
   ss << fmt::format("{:{}.3f} {:s}", std::sqrt(boost::accumulators::variance(accumulator)),
@@ -81,25 +97,36 @@ std::string AccumulatedRunTimeStatistics::PrintHumanReadable() const {
      << fmt::format("                    {:>{}s}    {:>{}s}    {:>{}s}    {:>{}s}\n", "mean", kFieldWidth,
                     "median", kFieldWidth,"sum", kFieldWidth, "stddev", kFieldWidth)
      << "---------------------------------------------------------------------------\n"
-     << FormatLine("MT Presetup", unit, At(accumulators_, StatId::kMtPresetup), kFieldWidth)
-     << FormatLine("MT Setup", unit, At(accumulators_, StatId::kMtSetup), kFieldWidth)
-     << FormatLine("SP Presetup", unit, At(accumulators_, StatId::kSpPresetup), kFieldWidth)
-     << FormatLine("SP Setup", unit, At(accumulators_, StatId::kSpSetup), kFieldWidth)
-     << FormatLine("SB Presetup", unit, At(accumulators_, StatId::kSbPresetup), kFieldWidth)
-     << FormatLine("SB Setup", unit, At(accumulators_, StatId::kSbSetup), kFieldWidth)
-     << FormatLine("Base OTs", unit, At(accumulators_, StatId::kBaseOts), kFieldWidth)
+     << FormatLine("MT Presetup", unit, At(accumulators_, StatId::kMtPresetup),
+                   At(samples_, StatId::kMtPresetup), kFieldWidth)
+     << FormatLine("MT Setup", unit, At(accumulators_, StatId::kMtSetup),
+                   At(samples_, StatId::kMtSetup), kFieldWidth)
+     << FormatLine("SP Presetup", unit, At(accumulators_, StatId::kSpPresetup),
+                   At(samples_, StatId::kSpPresetup), kFieldWidth)
+     << FormatLine("SP Setup", unit, At(accumulators_, StatId::kSpSetup),
+                   At(samples_, StatId::kSpSetup), kFieldWidth)
+     << FormatLine("SB Presetup", unit, At(accumulators_, StatId::kSbPresetup),
+                   At(samples_, StatId::kSbPresetup), kFieldWidth)
+     << FormatLine("SB Setup", unit, At(accumulators_, StatId::kSbSetup),
+                   At(samples_, StatId::kSbSetup), kFieldWidth)
+     << FormatLine("Base OTs", unit, At(accumulators_, StatId::kBaseOts),
+                   At(samples_, StatId::kBaseOts), kFieldWidth)
      << FormatLine("OT Extension Setup", unit, At(accumulators_, StatId::kOtExtensionSetup),
-                   kFieldWidth)
+                   At(samples_, StatId::kOtExtensionSetup), kFieldWidth)
      << FormatLine("KK13 OT Extension Setup", unit, At(accumulators_, StatId::kKK13OtExtensionSetup),
-                   kFieldWidth)
+                   At(samples_, StatId::kKK13OtExtensionSetup), kFieldWidth)
      << "---------------------------------------------------------------------------\n"
      << FormatLine("Preprocessing Total", unit, At(accumulators_, StatId::kPreprocessing),
-                   kFieldWidth)
-     << FormatLine("Gates Setup", unit, At(accumulators_, StatId::kGatesSetup), kFieldWidth)
-     << FormatLine("Gates Online", unit, At(accumulators_, StatId::kGatesOnline), kFieldWidth)
-     << FormatLine("Synchronization", unit, At(accumulators_, StatId::kSynchronize), kFieldWidth)
+                   At(samples_, StatId::kPreprocessing), kFieldWidth)
+     << FormatLine("Gates Setup", unit, At(accumulators_, StatId::kGatesSetup),
+                   At(samples_, StatId::kGatesSetup), kFieldWidth)
+     << FormatLine("Gates Online", unit, At(accumulators_, StatId::kGatesOnline),
+                   At(samples_, StatId::kGatesOnline), kFieldWidth)
+     << FormatLine("Synchronization", unit, At(accumulators_, StatId::kSynchronize),
+                   At(samples_, StatId::kSynchronize), kFieldWidth)
      << "---------------------------------------------------------------------------\n"
-     << FormatLine("Circuit Evaluation", unit, At(accumulators_, StatId::kEvaluate), kFieldWidth);
+     << FormatLine("Circuit Evaluation", unit, At(accumulators_, StatId::kEvaluate),
+                   At(samples_, StatId::kEvaluate), kFieldWidth);
 
   return ss.str();
 }
@@ -108,7 +135,7 @@ boost::json::object AccumulatedRunTimeStatistics::ToJson() const {
   const auto make_triple = [this](const auto& stat_id) {
     const auto& acc = At(accumulators_, stat_id);
     return boost::json::object({{"mean", boost::accumulators::mean(acc)},
-                                {"median", boost::accumulators::median(acc)},
+                                {"median", ExactMedian(At(samples_, stat_id))},
                                 {"sum", boost::accumulators::sum(acc)},
                                 // uncorrected standard deviation
                                 {"stddev", std::sqrt(boost::accumulators::variance(acc))}});

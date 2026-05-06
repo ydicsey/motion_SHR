@@ -31,6 +31,7 @@
 #include <boost/accumulators/statistics/sum.hpp>
 #include <boost/json.hpp>
 #include <list>
+#include <vector>
 #include "run_time_statistics.h"
 
 namespace encrypto::motion::communication {
@@ -61,6 +62,8 @@ class AccumulatedRunTimeStatistics {
   std::size_t count_ = 0;
   std::array<AccumulatorType, static_cast<std::size_t>(RunTimeStatistics::StatisticsId::kMax) + 1>
       accumulators_;
+  std::array<std::vector<double>, static_cast<std::size_t>(RunTimeStatistics::StatisticsId::kMax) + 1>
+      samples_;
 };
 
 class AccumulatedCommunicationStatistics {
