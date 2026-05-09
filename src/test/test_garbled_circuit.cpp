@@ -410,6 +410,102 @@ constexpr std::array<std::size_t, 3> kGarbledCircuitNumberOfWires{1, 64, 100};
 constexpr std::array<std::size_t, 3> kGarbledCircuitNumberOfSimd{1, 64, 100};
 constexpr std::array<bool, 2> kGarbledCircuitOnlineAfterSetup{false, true};
 
+// Regression test for the Backend::Reset() / garbled-circuit-provider Reset()
+// path. The rest of the GC suite only exercises a single Run() per Party. This
+// test runs an AND, calls Party::Reset() on both sides, runs another AND with
+// different inputs, and verifies that:
+//   (1) both rounds produce the correct plaintext output (Reset() preserves
+//       the ability to evaluate further circuits), and
+//   (2) the garbler's free-XOR offset Δ was re-randomized between rounds
+//       (Reset() must reseed the GC scheme; reusing Δ breaks security).
+TEST(GarbledCircuitReset, RunResetRunPreservesCorrectnessAndRerandomizesOffset) {
+  constexpr std::size_t kNumberOfWires = 1;
+  constexpr std::size_t kNumberOfSimd = 16;
+  constexpr std::size_t kGarblerId =
+      static_cast<std::size_t>(encrypto::motion::GarbledCircuitRole::kGarbler);
+
+  auto parties = encrypto::motion::MakeLocallyConnectedParties(2, kPortOffset);
+  for (auto& party : parties) {
+    party->GetLogger()->SetEnabled(kDetailedLoggingEnabled);
+    party->GetConfiguration()->SetOnlineAfterSetup(true);
+  }
+
+  std::array<std::array<encrypto::motion::BitVector<>, 2>, 2> round_inputs;
+  for (std::size_t round = 0; round < 2; ++round) {
+    for (std::size_t party = 0; party < 2; ++party) {
+      round_inputs[round][party] =
+          encrypto::motion::BitVector<>::RandomSeeded(kNumberOfSimd, 100u + round * 2 + party);
+    }
+  }
+
+  std::array<encrypto::motion::Block128, 2> garbler_offsets;
+
+  for (std::size_t round = 0; round < 2; ++round) {
+    std::vector<std::future<void>> futures;
+    for (std::size_t party_id = 0; party_id < 2u; ++party_id) {
+      futures.emplace_back(std::async(std::launch::async, [party_id, round, &parties,
+                                                            &round_inputs, &garbler_offsets]() {
+        auto [input_share_0, input_promise_0] =
+            parties[party_id]->In<encrypto::motion::MpcProtocol::kGarbledCircuit>(
+                0, kNumberOfWires, kNumberOfSimd);
+        encrypto::motion::ShareWrapper input_0(input_share_0);
+
+        auto [input_share_1, input_promise_1] =
+            parties[party_id]->In<encrypto::motion::MpcProtocol::kGarbledCircuit>(
+                1, kNumberOfWires, kNumberOfSimd);
+        encrypto::motion::ShareWrapper input_1(input_share_1);
+
+        if (party_id == 0) {
+          input_promise_0->set_value({round_inputs[round][0]});
+        } else {
+          input_promise_1->set_value({round_inputs[round][1]});
+        }
+
+        auto and_share = input_0 & input_1;
+        auto output = and_share.Out();
+
+        parties[party_id]->Run();
+
+        if (party_id == kGarblerId) {
+          garbler_offsets[round] =
+              dynamic_cast<encrypto::motion::proto::garbled_circuit::ThreeHalvesGarblerProvider&>(
+                  parties[party_id]->GetBackend()->GetGarbledCircuitProvider())
+                  .GetOffset();
+        }
+
+        EXPECT_EQ(output.GetWire(0).As<encrypto::motion::BitVector<>>(),
+                  round_inputs[round][0] & round_inputs[round][1])
+            << "round=" << round << " party=" << party_id;
+      }));
+    }
+    for (auto& f : futures) f.get();
+
+    if (round == 0) {
+      std::vector<std::future<void>> reset_futures;
+      reset_futures.reserve(parties.size());
+      for (auto& party : parties) {
+        reset_futures.emplace_back(
+            std::async(std::launch::async, [&party]() { party->Reset(); }));
+      }
+      for (auto& f : reset_futures) f.get();
+    }
+  }
+
+  // Use EXPECT_TRUE rather than EXPECT_NE because gtest's value-printer for
+  // Block128 picks up an unrelated BitSpan constructor.
+  EXPECT_TRUE(garbler_offsets[0] != garbler_offsets[1])
+      << "ThreeHalvesGarblerProvider::Reset() must re-randomize random_key_offset_; "
+         "reusing the free-XOR offset across rounds breaks GC security";
+
+  std::vector<std::future<void>> finish_futures;
+  finish_futures.reserve(parties.size());
+  for (auto& party : parties) {
+    finish_futures.emplace_back(
+        std::async(std::launch::async, [&party]() { party->Finish(); }));
+  }
+  for (auto& f : finish_futures) f.get();
+}
+
 INSTANTIATE_TEST_SUITE_P(GarbledCircuitTestSuite, GarbledCircuitTest,
                          testing::Combine(testing::ValuesIn(kGarbledCircuitNumberOfWires),
                                           testing::ValuesIn(kGarbledCircuitNumberOfSimd),

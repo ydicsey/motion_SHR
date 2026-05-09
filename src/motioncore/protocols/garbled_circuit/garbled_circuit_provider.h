@@ -70,6 +70,11 @@ class Provider : public FiberSetupWaitable {
 
   virtual void Setup() = 0;
 
+  // Clears per-round state so the provider can be reused after Backend::Reset().
+  // Subclasses must re-randomize any role-specific key material they set up in
+  // their constructor (the GC scheme is broken if keys are reused between rounds).
+  virtual void Reset();
+
   bool HasWork() { return true; }
 
   /// \brief Depending on the party's id (obtained from the \p communication_layer) creates either a
@@ -121,6 +126,8 @@ class ThreeHalvesGarblerProvider final : public Provider {
 
   void Setup() override;
 
+  void Reset() override;
+
   const Block128& GetOffset() const { return random_key_offset_; }
 
   std::shared_ptr<garbled_circuit::AndGate> MakeAndGate(motion::SharePointer parent_a,
@@ -140,6 +147,8 @@ class ThreeHalvesGarblerProvider final : public Provider {
                                               std::span<Block128> input);
 
  private:
+  void InitializeRandomKeyMaterial();
+
   Block128 random_key_offset_;
 };
 
@@ -150,6 +159,8 @@ class ThreeHalvesEvaluatorProvider final : public Provider {
   ~ThreeHalvesEvaluatorProvider() override = default;
 
   void Setup() override;
+
+  void Reset() override;
 
   void Evaluate(const Block128Vector& keys_a, const Block128Vector& keys_b,
                 Block128Vector& keys_out, const std::byte* garbled_tables,

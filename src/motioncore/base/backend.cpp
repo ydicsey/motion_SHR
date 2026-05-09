@@ -226,6 +226,9 @@ void Backend::Reset() {
   if (bmr_provider_) {
     bmr_provider_->Reset();
   }
+  if (garbled_circuit_provider_) {
+    garbled_circuit_provider_->Reset();
+  }
 
   register_->Reset();
 }

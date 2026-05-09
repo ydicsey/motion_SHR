@@ -88,6 +88,27 @@ void ThreeHalvesEvaluatorProvider::Setup() {
   }
 }
 
+void Provider::Reset() {
+  number_of_garbled_tables_ = 0;
+  preprocessing_done_.store(false);
+  ResetSetupIsReady();
+}
+
+void ThreeHalvesGarblerProvider::Reset() {
+  Provider::Reset();
+  // Garbling keys must be freshly sampled each round; reusing them across
+  // rounds breaks the security of the three-halves GC scheme.
+  InitializeRandomKeyMaterial();
+}
+
+void ThreeHalvesEvaluatorProvider::Reset() {
+  Provider::Reset();
+  // The setup future is reusable: the Garbler's next Setup() will fill the
+  // existing promise once the previous value has been consumed (which it has,
+  // since Setup() ran before Reset()). Public data is overwritten on the next
+  // Setup() call, so no extra work needed here.
+}
+
 std::unique_ptr<garbled_circuit::Provider> Provider::MakeProvider(
     communication::CommunicationLayer& communication_layer) {
   assert(communication_layer.GetMyId() == static_cast<std::size_t>(GarbledCircuitRole::kGarbler) ||
@@ -169,7 +190,12 @@ std::shared_ptr<garbled_circuit::XorGate> ThreeHalvesEvaluatorProvider::MakeXorG
 
 ThreeHalvesGarblerProvider::ThreeHalvesGarblerProvider(
     communication::CommunicationLayer& communication_layer)
-    : Provider(communication_layer), random_key_offset_(Block128::MakeRandom()) {
+    : Provider(communication_layer) {
+  InitializeRandomKeyMaterial();
+}
+
+void ThreeHalvesGarblerProvider::InitializeRandomKeyMaterial() {
+  random_key_offset_ = Block128::MakeRandom();
   BitSpan random_key_offset_span(random_key_offset_.data(), kKappa);
   // Set 1 at the position of the permutation bit.
   random_key_offset_span.Set(true, kKappa - 1);
