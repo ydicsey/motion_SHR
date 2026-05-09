@@ -112,12 +112,13 @@ void Party::Run(std::size_t repetitions) {
 }
 
 void Party::Reset() {
-  logger_->LogError("Not yet implemented");
+  // Flush any in-flight messages from the previous round before tearing down
+  // local provider state (some Reset() paths free buffers shared with peers).
   backend_->Synchronize();
   logger_->LogDebug("Party reset");
   backend_->Reset();
-  logger_->LogDebug("Party sync");
-  backend_->Synchronize();
+  // The next Run() calls Synchronize() before EvaluateCircuit(), which gives
+  // the same cross-party alignment guarantee — no need to barrier here too.
 }
 
 void Party::Clear() {
