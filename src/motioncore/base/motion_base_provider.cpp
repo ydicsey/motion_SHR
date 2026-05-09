@@ -56,11 +56,17 @@ void BaseProvider::Reset() {
   if (global_randomness_generator_) {
     global_randomness_generator_->ResetBitPool();
   }
-  ResetSetupIsReady();
-  // ResetOnlineIsReady();
+  // Setup state (AES key, seeds, generator nonces) is preserved across rounds.
+  // The CTR stream is keyed by aes_ctr_nonce_* and indexed by gate_id, which
+  // advances monotonically via Register::Reset(), so no key-stream reuse.
 }
 
 void BaseProvider::Setup() {
+  if (IsSetupReady()) {
+    // HelloMessage exchange already completed in a previous round; reuse seeds.
+    return;
+  }
+
   if constexpr (kDebug) {
     if (logger_) {
       logger_->LogDebug("BaseProvider::Setup: running setup");
